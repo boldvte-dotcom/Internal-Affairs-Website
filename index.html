@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Internal Affairs Website</title>
+  <style>
+    :root{
+      --bg1:#05080e; --bg2:#0e1621; --bg3:#1a1013; --cyan:#79e8ff; --cyan2:#e2fbff;
+      --amber:#ca8f5a; --red:#ff5c66; --green:#47de91; --text:#f6efe9; --muted:#d0c0b5;
+      --line:rgba(120,232,255,.18); --shadow:0 28px 90px rgba(0,0,0,.5); --mx:50%; --my:50%;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;font-family:Segoe UI,system-ui,sans-serif;color:var(--text)}
+    body{background:linear-gradient(135deg,var(--bg1),var(--bg2) 42%,var(--bg3));overflow-x:hidden}
+    .bg-aurora,.bg-stars,.bg-grid,.bg-noise,.bg-scan,.mouse-glow{position:fixed;inset:0;pointer-events:none}
+    .bg-aurora{z-index:-6;background:radial-gradient(circle at 12% 20%, rgba(120,232,255,.22), transparent 20%),radial-gradient(circle at 84% 18%, rgba(255,92,102,.12), transparent 18%),radial-gradient(circle at 64% 80%, rgba(202,143,90,.12), transparent 20%);filter:blur(34px);animation:aurora 18s ease-in-out infinite alternate}
+    .bg-stars{z-index:-5;background:radial-gradient(circle at 18% 20%, rgba(255,255,255,.35) 0 1px, transparent 1px),radial-gradient(circle at 64% 72%, rgba(255,255,255,.18) 0 1px, transparent 1px),radial-gradient(circle at 86% 34%, rgba(255,255,255,.20) 0 1px, transparent 1px);background-size:160px 160px,220px 220px,280px 280px;opacity:.45}
+    .bg-grid{z-index:-4;background:linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);background-size:34px 34px;mask-image:linear-gradient(to bottom, rgba(255,255,255,.45), transparent 85%)}
+    .bg-noise{z-index:-3;opacity:.08;background-image:radial-gradient(circle at 20% 20%, rgba(255,255,255,.45) 0 1px, transparent 1px),radial-gradient(circle at 70% 55%, rgba(255,255,255,.2) 0 1px, transparent 1px);background-size:28px 28px,40px 40px}
+    .bg-scan{z-index:-2;background:linear-gradient(180deg, transparent, rgba(120,232,255,.04), transparent);animation:scan 8s linear infinite}
+    .mouse-glow{z-index:-1;background:radial-gradient(circle 320px at var(--mx) var(--my), rgba(120,232,255,.14), transparent 62%),radial-gradient(circle 420px at calc(var(--mx) + 10%) calc(var(--my) + 7%), rgba(202,143,90,.08), transparent 65%)}
+
+    @keyframes aurora{from{transform:translateY(-18px) scale(1)}to{transform:translateY(18px) scale(1.06)}}
+    @keyframes scan{from{transform:translateY(-18%)}to{transform:translateY(18%)}}
+    @keyframes modalIn{to{transform:translateY(0) scale(1);opacity:1}}
+    @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes toastIn{from{opacity:0;transform:translateY(-18px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+    @keyframes shrink{from{width:100%}to{width:0}}
+    @keyframes verificationSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+    @keyframes verificationSpinReverse{from{transform:rotate(360deg)}to{transform:rotate(0deg)}}
+    @keyframes verificationUnlock{0%,100%{transform:translateY(0) rotate(0deg)}18%{transform:translateY(-5px) rotate(0deg)}40%{transform:translateY(-14px) rotate(-24deg)}62%{transform:translateY(-9px) rotate(-10deg)}82%{transform:translateY(-2px) rotate(0deg)}}
+    @keyframes verificationStars{from{transform:translate3d(0,0,0)}to{transform:translate3d(-18px,16px,0)}}
+    @keyframes verificationBeam{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(12px)}}
+    @keyframes chainSpin{from{transform:translate(-50%,-50%) rotate(0deg)}to{transform:translate(-50%,-50%) rotate(360deg)}}
+    @keyframes termPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+    @keyframes slideDown{from{transform:translate(-50%,-120%)}to{transform:translate(-50%,0)}}
+    @keyframes panelFlash{0%{transform:scale(.92);opacity:0}100%{transform:scale(1);opacity:1}}
+    @keyframes dots1{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-8px);opacity:1}}
+    @keyframes dots2{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-8px);opacity:1}}
+    @keyframes dots3{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-8px);opacity:1}}
+
+    .hidden{display:none!important}
+    .toast-wrap,.top-banners{position:fixed;left:50%;transform:translateX(-50%);width:min(860px,94vw);z-index:4000;display:grid;gap:10px}
+    .toast-wrap{top:18px}
+    .top-banners{top:22px}
+    .toast,.banner{border-radius:20px;overflow:hidden;background:linear-gradient(180deg, rgba(68,14,14,.96), rgba(18,10,10,.96));border:1px solid rgba(255,98,98,.28);box-shadow:var(--shadow);animation:toastIn .34s cubic-bezier(.2,.8,.2,1) forwards}
+    .toast-body,.banner-body{padding:14px 16px;font-weight:800}
+    .toast-bar,.banner-bar{height:5px;background:linear-gradient(90deg,var(--red),#ffd45c,var(--cyan));animation:shrink linear forwards}
+
+    .slider-alert{
+      position:fixed;top:16px;left:50%;transform:translateX(-50%);
+      z-index:5000;min-width:min(620px,92vw);border-radius:18px;
+      background:linear-gradient(90deg,#7f0e14,#d52432);border:1px solid rgba(255,255,255,.12);
+      box-shadow:var(--shadow);animation:slideDown .3s ease forwards;
+    }
+    .slider-alert .body{padding:16px 18px;font-weight:900;text-align:center}
+    .slider-alert .bar{height:5px;background:linear-gradient(90deg,#ffefef,#ffd45c,#79e8ff)}
+
+    .layout{min-height:100vh;display:grid;grid-template-columns:320px minmax(0,1080px);justify-content:center;gap:24px;padding:26px}
+    .sidebar,.panel{border:1px solid var(--line);background:radial-gradient(circle at top left, rgba(120,232,255,.06), transparent 22%),linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));border-radius:30px;backdrop-filter:blur(18px);box-shadow:var(--shadow)}
+    .sidebar{padding:20px;position:sticky;top:26px;height:fit-content;animation:rise .6s ease both}
+    .panel{padding:22px;position:relative;overflow:hidden;animation:rise .7s ease both}
+    .brand-wrap{position:relative;width:min(220px,82%);margin:8px auto 12px}
+    .brand-img{width:100%;display:block;border-radius:18px;box-shadow:0 20px 45px rgba(0,0,0,.35),0 0 25px rgba(120,232,255,.12);border:1px solid rgba(255,255,255,.08)}
+    .headline{margin:0 0 10px;font-size:clamp(26px,4vw,50px);line-height:1.04;font-weight:900;text-align:center}
+    .futuristic{background:linear-gradient(90deg,#e7ccb0,var(--cyan),#f2b78f,var(--cyan2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .sub{color:var(--muted);line-height:1.75;text-align:center;font-size:14px}
+    .site-title{font-size:28px}
+    .menu{display:grid;gap:10px;margin-top:18px}
+
+    .nav-button,.panel-button,.btn,.input,.select,textarea{
+      width:100%;border-radius:16px;border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      color:#fff;padding:14px 16px;font-size:14px;outline:none;transition:.2s ease
+    }
+    .nav-button,.panel-button,.btn{cursor:pointer;font-weight:800;text-transform:uppercase;letter-spacing:.06em;box-shadow:0 12px 30px rgba(0,0,0,.2)}
+    .nav-button:hover,.panel-button:hover,.btn:hover,.dashboard-inbox:hover,.profile-chip:hover{transform:translateY(-2px) scale(1.01)}
+    .btn-blue{background:linear-gradient(90deg,#21475e,#69d8ff)}
+    .btn-red{background:linear-gradient(90deg,#581111,#e34a4a)}
+    .btn-green{background:linear-gradient(90deg,#0e4c2d,#40d98d)}
+    .btn-brown{background:linear-gradient(90deg,#4a2a18,#a06a42)}
+    .btn-gold{background:linear-gradient(90deg,#52330e,#d0a040)}
+    textarea{resize:vertical;min-height:108px}
+    .select{appearance:none;background:#10161d;color:#fff;border:1px solid rgba(120,232,255,.26)}
+    .input:focus,.select:focus,textarea:focus{border-color:rgba(120,232,255,.4);box-shadow:0 0 0 4px rgba(120,232,255,.08)}
+
+    .hero-card,.content-card{border-radius:24px;border:1px solid var(--line);background:radial-gradient(circle at top right, rgba(120,232,255,.07), transparent 24%),linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.24)}
+    .list-card{margin-top:10px;border-radius:18px;padding:15px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));box-shadow:0 12px 35px rgba(0,0,0,.18)}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row{display:grid;gap:12px}
+    .action-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:18px}
+    .dashboard-top{display:flex;justify-content:space-between;align-items:center;gap:16px}
+    .dashboard-inbox{
+      position:relative; display:flex; align-items:center; justify-content:center;
+      width:96px; height:96px; border-radius:28px;
+      border:1px solid rgba(120,232,255,.18);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      cursor:pointer;
+    }
+    .folder-big{position:relative;width:50px;height:34px;background:linear-gradient(180deg,#95eaff,#4a87b7);border-radius:6px 6px 10px 10px;box-shadow:0 0 24px rgba(120,232,255,.18)}
+    .folder-big::before{content:"";position:absolute;left:4px;top:-9px;width:22px;height:11px;background:linear-gradient(180deg,#d8fbff,#6ca1c6);border-radius:5px 5px 0 0}
+    .count-badge{
+      position:absolute; top:10px; right:10px; min-width:26px; height:26px; padding:0 8px;
+      border-radius:999px; display:grid; place-items:center;
+      background:linear-gradient(180deg,#ff8188,#d92b36); color:#fff; font-weight:900; font-size:12px;
+      box-shadow:0 10px 20px rgba(0,0,0,.28);
+    }
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+    .stat-card{padding:18px;border-radius:18px;border:1px solid rgba(120,232,255,.14);background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02))}
+    .stat-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    .stat-value{font-size:28px;font-weight:900;margin-top:6px}
+    .separator{margin:14px 0;height:1px;background:linear-gradient(90deg, rgba(120,232,255,.7), rgba(255,92,102,.7), rgba(0,0,0,.05))}
+
+    .modal{position:fixed;inset:0;display:grid;place-items:center;padding:22px;z-index:2500;background:rgba(0,0,0,.62);backdrop-filter:blur(10px)}
+    .modal-box{width:min(980px,94vw);max-height:88vh;overflow:auto;border-radius:30px;border:1px solid var(--line);background:linear-gradient(180deg, rgba(18,21,26,.98), rgba(11,11,14,.98));box-shadow:var(--shadow);padding:24px;position:relative;transform:translateY(28px) scale(.95);opacity:0;animation:modalIn .44s cubic-bezier(.2,.8,.2,1) forwards}
+    .modal-close{position:absolute;right:18px;top:18px;width:42px;height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));color:white;font-size:22px;font-weight:900;cursor:pointer}
+
+    .chat-shell{width:min(760px,92vw);border-radius:26px;border:1px solid rgba(120,232,255,.18);background:linear-gradient(180deg, rgba(16,22,30,.98), rgba(10,10,14,.98));box-shadow:var(--shadow);overflow:hidden}
+    .chat-header{padding:16px 18px;border-bottom:1px solid rgba(120,232,255,.16);display:flex;align-items:center;gap:12px;background:linear-gradient(180deg, rgba(120,232,255,.08), rgba(255,255,255,.02))}
+    .bot-pfp{width:44px;height:44px;min-width:44px;min-height:44px;border-radius:50%;background:radial-gradient(circle at 30% 30%, #fff, var(--cyan));box-shadow:0 0 20px rgba(120,232,255,.28);aspect-ratio:1/1}
+    .chat-body{padding:18px;max-height:52vh;overflow:auto;display:grid;gap:14px}
+    .chat-msg{display:flex;gap:12px;align-items:flex-start}
+    .chat-bubble{padding:14px 16px;border-radius:18px;border:1px solid rgba(120,232,255,.16);background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));line-height:1.7}
+    .chat-controls{padding:16px 18px;border-top:1px solid rgba(120,232,255,.16);display:grid;gap:12px}
+    .typing{display:flex;gap:8px;align-items:center;justify-content:flex-start;padding:10px 0}
+    .typing span{width:10px;height:10px;border-radius:50%;background:var(--cyan);display:inline-block}
+    .typing span:nth-child(1){animation:dots1 1s infinite}
+    .typing span:nth-child(2){animation:dots2 1s infinite .18s}
+    .typing span:nth-child(3){animation:dots3 1s infinite .36s}
+
+    .profile-anchor{position:fixed;top:18px;left:18px;z-index:3500;display:flex;align-items:center;gap:10px}
+    .profile-chip{
+      display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:999px;
+      border:1px solid rgba(120,232,255,.18);
+      background:linear-gradient(180deg, rgba(16,22,30,.92), rgba(10,10,14,.96));
+      box-shadow:var(--shadow); cursor:pointer;
+    }
+    .profile-avatar{width:44px;height:44px;border-radius:14px;object-fit:cover;border:1px solid rgba(255,255,255,.1)}
+    .profile-meta{display:grid}
+    .profile-name{font-weight:900;font-size:13px}
+    .profile-role{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+
+    .parchment{
+      border-radius:28px;
+      background:linear-gradient(180deg, rgba(252,235,204,.98), rgba(226,201,162,.98));
+      color:#3f2b15;
+      border:1px solid rgba(113,78,38,.35);
+      box-shadow:0 24px 60px rgba(0,0,0,.3), inset 0 0 40px rgba(255,255,255,.25);
+      padding:22px;
+    }
+    .parchment-title{margin:0 0 8px;font-size:30px;font-weight:900;text-align:center;color:#5a3715}
+    .parchment-desc{color:#6a4922;line-height:1.75;text-align:center;font-size:15px}
+    .parchment-list{margin-top:16px;display:grid;gap:12px}
+    .parchment-row{display:flex;align-items:center;gap:12px;padding:14px;border-radius:18px;background:rgba(255,255,255,.28);border:1px solid rgba(113,78,38,.18)}
+    .parchment-row img{width:56px;height:56px;border-radius:16px;object-fit:cover;border:1px solid rgba(113,78,38,.2)}
+
+    .inbox-grid{display:grid;gap:14px;max-height:62vh;overflow:auto;padding-right:6px}
+    .inbox-card{border-radius:22px;padding:18px;border:1px solid rgba(120,232,255,.16);background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));box-shadow:0 18px 40px rgba(0,0,0,.2)}
+    .inbox-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+    .inbox-title{font-size:18px;font-weight:900;color:var(--cyan2)}
+    .inbox-meta{font-size:12px;color:var(--muted);margin-top:8px}
+    .inbox-delete{min-width:34px;height:34px;border:none;border-radius:999px;background:linear-gradient(180deg,#ff7b82,#d72834);color:#fff;font-weight:900;cursor:pointer}
+    .inbox-unread{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 10px;border-radius:999px;background:linear-gradient(180deg,#ff8a90,#cf2030);font-size:12px;font-weight:900;color:#fff}
+
+    .verification-gate{
+      position:fixed; inset:0; z-index:9999; overflow-y:auto; overflow-x:hidden; padding:28px 18px;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(120,232,255,.18), transparent 18%),
+        radial-gradient(circle at 82% 16%, rgba(255,92,102,.16), transparent 18%),
+        radial-gradient(circle at 50% 75%, rgba(202,143,90,.12), transparent 20%),
+        linear-gradient(180deg, rgba(4,7,13,.985), rgba(8,13,22,.995));
+      backdrop-filter: blur(10px);
+    }
+    .verification-bg{
+      position:absolute; inset:0;
+      background:
+        linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+      background-size:34px 34px;
+      opacity:.3;
+      mask-image:linear-gradient(to bottom, rgba(255,255,255,.95), rgba(255,255,255,.25));
+    }
+    .verification-particles{
+      position:absolute; inset:0;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(255,255,255,.7) 0 1px, transparent 1px),
+        radial-gradient(circle at 75% 20%, rgba(255,255,255,.45) 0 1px, transparent 1px),
+        radial-gradient(circle at 62% 76%, rgba(255,255,255,.35) 0 1px, transparent 1px),
+        radial-gradient(circle at 34% 68%, rgba(255,255,255,.3) 0 1px, transparent 1px);
+      background-size:180px 180px,240px 240px,260px 260px,320px 320px;
+      opacity:.45; animation:verificationStars 16s linear infinite;
+    }
+    .verification-shell{
+      position:relative; width:min(920px, 100%); min-height:min(760px, calc(100vh - 56px)); margin:0 auto;
+      border-radius:34px; border:1px solid rgba(120,232,255,.22);
+      background:
+        radial-gradient(circle at top left, rgba(120,232,255,.08), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(255,92,102,.08), transparent 24%),
+        linear-gradient(180deg, rgba(17,22,30,.96), rgba(8,11,18,.985));
+      box-shadow:0 40px 120px rgba(0,0,0,.58), inset 0 0 0 1px rgba(255,255,255,.03);
+      padding:34px 28px; overflow:hidden;
+    }
+    .verification-shell::before{
+      content:""; position:absolute; inset:-20%;
+      background:conic-gradient(from 0deg, transparent, rgba(120,232,255,.08), transparent, rgba(255,92,102,.07), transparent);
+      filter:blur(30px); animation:verificationSpin 10s linear infinite; pointer-events:none;
+    }
+    #verificationPanel{position:relative;z-index:1;min-height:100%;display:grid;place-items:center}
+    .verification-stage{width:min(680px,100%);margin:0 auto;text-align:center}
+    .verification-step{display:grid;gap:18px}
+    .verification-kicker{display:inline-block;padding:9px 14px;border-radius:999px;border:1px solid rgba(120,232,255,.18);background:rgba(255,255,255,.04);font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan2)}
+    .verification-title{margin:10px 0 8px;font-size:clamp(34px,6vw,64px);line-height:1.02;font-weight:900;background:linear-gradient(90deg,#f2d9c1,var(--cyan),#ffd7d7,#ebfbff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .verification-desc{margin:0 auto;max-width:640px;color:var(--muted);font-size:16px;line-height:1.85}
+    .verification-card{margin-top:6px;padding:24px;border-radius:26px;border:1px solid rgba(120,232,255,.16);background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));box-shadow:0 22px 45px rgba(0,0,0,.22)}
+    .verification-lock-wrap{width:220px;height:220px;margin:0 auto 8px;position:relative}
+    .verification-lock-ring,.verification-lock-ring-2,.verification-lock-core,.verification-lock-beam{position:absolute;border-radius:50%}
+    .verification-lock-ring{inset:0;border:2px solid rgba(120,232,255,.55);box-shadow:0 0 40px rgba(120,232,255,.18), inset 0 0 30px rgba(120,232,255,.08);animation:verificationSpin 7s linear infinite}
+    .verification-lock-ring-2{inset:20px;border:2px dashed rgba(255,255,255,.18);animation:verificationSpinReverse 4s linear infinite}
+    .verification-lock-core{inset:52px;background:radial-gradient(circle, rgba(255,255,255,.98), rgba(120,232,255,.35), transparent 70%);box-shadow:0 0 35px rgba(120,232,255,.2)}
+    .verification-lock-beam{inset:0;background:linear-gradient(180deg, transparent, rgba(120,232,255,.35), transparent);width:3px;height:220px;left:50%;transform:translateX(-50%);animation:verificationBeam 1.8s ease-in-out infinite}
+    .verification-lock{position:absolute;left:50%;top:50%;width:124px;height:156px;transform:translate(-50%,-50%)}
+    .verification-lock-body{position:absolute;left:16px;right:16px;bottom:0;height:92px;border-radius:24px;background:linear-gradient(180deg,#8aeaff,#4a8bbc);box-shadow:0 12px 28px rgba(0,0,0,.28),0 0 24px rgba(120,232,255,.24)}
+    .verification-lock-body::before{content:"";position:absolute;left:50%;top:48%;width:14px;height:14px;border-radius:50%;background:#ffffff;transform:translate(-50%,-50%);box-shadow:0 0 14px rgba(255,255,255,.6)}
+    .verification-lock-body::after{content:"";position:absolute;left:50%;top:56%;width:8px;height:22px;border-radius:999px;background:rgba(255,255,255,.9);transform:translateX(-50%)}
+    .verification-lock-shackle{position:absolute;left:28px;right:28px;top:0;height:74px;border:11px solid #ebfbff;border-bottom:none;border-radius:44px 44px 0 0;transform-origin:82% 100%;animation:verificationUnlock 2.6s ease-in-out infinite}
+    .verification-input,.verification-code,.verification-actions{width:min(520px,100%);margin:0 auto}
+    .verification-actions{display:grid;gap:12px}
+    .verification-code{letter-spacing:.18em;text-align:center;font-weight:900;color:var(--cyan2)}
+    .verification-success{border-color:rgba(71,222,145,.22);background:linear-gradient(180deg, rgba(71,222,145,.08), rgba(255,255,255,.02))}
+    .verification-error{border-color:rgba(255,92,102,.22);background:linear-gradient(180deg, rgba(255,92,102,.08), rgba(255,255,255,.02))}
+    .verification-check-grid{display:grid;place-items:center;gap:16px}
+    .verification-dots{display:flex;gap:10px;justify-content:center;align-items:center}
+    .verification-dots span{width:12px;height:12px;border-radius:50%;background:var(--cyan);display:inline-block}
+    .verification-dots span:nth-child(1){animation:dots1 1s infinite}
+    .verification-dots span:nth-child(2){animation:dots2 1s infinite .18s}
+    .verification-dots span:nth-child(3){animation:dots3 1s infinite .36s}
+
+    .restricted-screen,.terminated-screen{
+      min-height:100vh;
+      width:100vw;
+      display:grid;
+      place-items:center;
+      padding:24px;
+      position:fixed;
+      inset:0;
+      z-index:9000;
+      background:linear-gradient(180deg, rgba(6,7,13,.98), rgba(10,13,20,.98));
+    }
+    .restricted-box,.terminated-box{
+      width:min(920px,94vw);
+      min-height:min(720px,88vh);
+      border-radius:30px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(18,21,26,.98), rgba(11,11,14,.98));
+      box-shadow:var(--shadow);
+      padding:30px;
+      text-align:center;
+      display:grid;
+      align-content:center;
+      gap:14px;
+      animation:panelFlash .35s ease both;
+    }
+    .terminated-lock{
+      width:220px;height:220px;margin:0 auto 22px;position:relative;animation:termPulse 2.4s ease-in-out infinite;
+    }
+    .terminated-chain,.terminated-chain2{
+      position:absolute;left:50%;top:50%;border:2px solid rgba(120,232,255,.35);border-radius:50%;
+      transform:translate(-50%,-50%);
+      animation:chainSpin 8s linear infinite;
+    }
+    .terminated-chain{width:220px;height:220px}
+    .terminated-chain2{width:170px;height:170px;animation-direction:reverse;animation-duration:5s}
+    .terminated-core{
+      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:110px;height:140px;
+    }
+    .terminated-shackle{
+      position:absolute;left:20px;right:20px;top:0;height:60px;border:10px solid #ebfbff;border-bottom:none;border-radius:40px 40px 0 0;
+      box-shadow:0 0 24px rgba(120,232,255,.22);
+    }
+    .terminated-body{
+      position:absolute;left:8px;right:8px;bottom:0;height:84px;border-radius:22px;
+      background:linear-gradient(180deg,#8aeaff,#4a8bbc);box-shadow:0 0 35px rgba(120,232,255,.18),0 16px 30px rgba(0,0,0,.28);
+    }
+
+    @media (max-width:980px){
+      .layout{grid-template-columns:1fr;padding:18px}
+      .sidebar{position:static}
+      .grid-2,.stats,.action-grid{grid-template-columns:1fr}
+      .dashboard-top{flex-direction:column;align-items:stretch}
+      .verification-gate{padding:16px 10px}
+      .verification-shell{min-height:auto;padding:22px 16px;border-radius:24px}
+      .verification-lock-wrap{width:170px;height:170px}
+      .verification-lock-beam{height:170px}
+      .verification-title{font-size:clamp(28px,9vw,42px)}
+      .profile-anchor{position:static;margin:16px}
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-aurora"></div>
+  <div class="bg-stars"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-noise"></div>
+  <div class="bg-scan"></div>
+  <div class="mouse-glow"></div>
+
+  <div class="toast-wrap" id="toasts"></div>
+  <div class="top-banners" id="topBanners"></div>
+  <div id="sliderArea"></div>
+
+  <div class="profile-anchor hidden" id="profileAnchor">
+    <button class="profile-chip" id="profileChip">
+      <img id="profileAvatar" class="profile-avatar" alt="Avatar">
+      <div class="profile-meta">
+        <span class="profile-name" id="profileName">Not verified</span>
+        <span class="profile-role" id="profileRole">Guest</span>
+      </div>
+    </button>
+  </div>
+
+  <div class="modal hidden" id="genericModal">
+    <div class="modal-box" id="genericModalBox"></div>
+  </div>
+
+  <div id="verificationGate" class="verification-gate hidden">
+    <div class="verification-bg"></div>
+    <div class="verification-particles"></div>
+    <div class="verification-shell">
+      <div id="verificationPanel"></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand-wrap">
+        <img class="brand-img" src="https://tr.rbxcdn.com/180DAY-c664da9f4ff2efd0d2f0c774ae82b6ce/150/150/Image/Webp/noFilter" alt="Internal Affairs Image">
+      </div>
+      <h1 class="headline futuristic site-title">Internal Affairs Website</h1>
+      <p class="sub">
+        Logged in as <span id="userLabel">Guest</span><br>
+        Roblox Username: <span id="robloxLabel">Not verified</span><br>
+        Role: <span id="roleLabel">Guest</span><br>
+        Custom ID: <span id="sidebarCustomId">IA-XXXXXXXXXX</span>
+      </p>
+
+      <div class="menu">
+        <button class="nav-button btn-blue" id="dashboardBtn">Dashboard</button>
+        <button class="nav-button btn-red" id="reportBtn">Report a divisional member</button>
+        <button class="nav-button btn-blue" id="appealBtn">Appeal a punishment</button>
+        <button class="nav-button btn-blue" id="contactBtn">Contact</button>
+        <button class="nav-button btn-blue" id="ticketStatusBtn">Ticket Status</button>
+        <button class="nav-button btn-brown hidden" id="lowBtn">Internal Affairs Low Rank Panel</button>
+        <button class="nav-button btn-brown hidden" id="midBtn">Internal Affairs Middle Rank Panel</button>
+        <button class="nav-button btn-brown hidden" id="highBtn">Internal Affairs High Rank Panel</button>
+        <button class="nav-button btn-brown hidden" id="hqBtn">Internal Affairs Headquarters Panel</button>
+        <button class="nav-button btn-brown hidden" id="jcBtn">Joint Chiefs Panel</button>
+        <button class="nav-button btn-brown hidden" id="ownerBtn">Ownership Panel</button>
+      </div>
+    </aside>
+
+    <main class="panel">
+      <div id="contentArea"></div>
+    </main>
+  </div>
+
+  <script>
+    const API = "http://127.0.0.1:8000";
+    let sessionKey = localStorage.getItem("ia_session_key") || "";
+    let customId = localStorage.getItem("ia_custom_id") || "";
+    let visitorKey = localStorage.getItem("ia_visitor_key") || "";
+    let verificationGateState = "idle";
+    let refreshTimer = null;
+    let threadPollTimer = null;
+    let currentTicketId = null;
+    let currentTicketDraft = "";
+    let currentTicketViewMode = "thread";
+    let currentTicketCloseDraft = "";
+    let ticketRenderLocked = false;
+
+    let meState = {
+      username: "Guest",
+      roblox_username: null,
+      roblox_user_id: null,
+      avatar_url: "",
+      role_name: "Guest",
+      custom_id: customId || "IA-XXXXXXXXXX",
+      verified: false,
+      forced_logout: false,
+      suspended: false,
+      suspended_reason: null,
+      terminated: false,
+      terminated_reason: null,
+      terminated_time_label: null,
+      base_permissions: [],
+      extra_permissions: [],
+      grantable_permissions: [],
+      messages: [],
+      events: [],
+      inbox_unread_count: 0,
+      shutdown: null,
+      join_limit: null
+    };
+
+    const el = (id) => document.getElementById(id);
+
+    window.addEventListener("pointermove", (e) => {
+      document.body.style.setProperty("--mx", `${e.clientX}px`);
+      document.body.style.setProperty("--my", `${e.clientY}px`);
+    });
+
+    function toast(message, ms = 4000) {
+      const node = document.createElement("div");
+      node.className = "toast";
+      node.innerHTML = `<div class="toast-body">${message}</div><div class="toast-bar" style="animation-duration:${ms}ms"></div>`;
+      el("toasts").appendChild(node);
+      setTimeout(() => node.remove(), ms + 300);
+    }
+
+    function topSlider(message, ms = 5400) {
+      const node = document.createElement("div");
+      node.className = "slider-alert";
+      node.innerHTML = `<div class="body">${message}</div><div class="bar" style="animation:shrink ${ms}ms linear forwards;"></div>`;
+      el("sliderArea").appendChild(node);
+      setTimeout(() => node.remove(), ms + 250);
+    }
+
+    async function bootstrapSession(force = false) {
+      if (!force && sessionKey && customId) return;
+      const res = await fetch(API + "/api/bootstrap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitor_key: visitorKey })
+      });
+
+      const raw = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        try {
+          const detail = typeof raw.detail === "string" ? JSON.parse(raw.detail) : raw.detail;
+          if (detail && detail.message) {
+            renderRestrictedJoin(detail.message);
+            throw new Error(detail.message);
+          }
+        } catch (_) {}
+        throw new Error(typeof raw.detail === "string" ? raw.detail : "Bootstrap failed.");
+      }
+
+      sessionKey = raw.session_key;
+      customId = raw.custom_id;
+      visitorKey = raw.visitor_key;
+      localStorage.setItem("ia_session_key", sessionKey);
+      localStorage.setItem("ia_custom_id", customId);
+      localStorage.setItem("ia_visitor_key", visitorKey);
+    }
+
+    async function api(path, options = {}, allowRetry = true) {
+      const res = await fetch(API + path, {
+        headers: { "Content-Type": "application/json" },
+        ...options
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return data;
+
+      const detail = typeof data.detail === "string" ? data.detail : "Request failed.";
+      if ((res.status === 401 || detail.includes("Invalid session")) && allowRetry) {
+        localStorage.removeItem("ia_session_key");
+        localStorage.removeItem("ia_custom_id");
+        sessionKey = "";
+        customId = "";
+        await bootstrapSession(true);
+        return api(path, options, false);
+      }
+      throw new Error(detail);
+    }
+
+    function modalChrome(inner) {
+      return `<button class="modal-close" onclick="hideModal('genericModal')">×</button>${inner}`;
+    }
+
+    function showModal(id) { el(id).classList.remove("hidden"); }
+    function hideModal(id) {
+      el(id).classList.add("hidden");
+      if (id === "genericModal") stopTicketPolling();
+    }
+    function showVerificationGate() { el("verificationGate").classList.remove("hidden"); }
+    function hideVerificationGate() {
+      el("verificationGate").classList.add("hidden");
+      verificationGateState = "idle";
+    }
+
+    function perms() {
+      return new Set([...(meState.base_permissions || []), ...(meState.extra_permissions || [])]);
+    }
+
+    function hasPerm(name) {
+      return perms().has(name);
+    }
+
+    function setButtonVisible(id, visible) {
+      const node = el(id);
+      if (!node) return;
+      node.classList.toggle("hidden", !visible);
+    }
+
+    function applyState() {
+      el("userLabel").textContent = meState.username || "Guest";
+      el("robloxLabel").textContent = meState.roblox_username || "Not verified";
+      el("roleLabel").textContent = meState.role_name || "Guest";
+      el("sidebarCustomId").textContent = meState.custom_id || "IA-XXXXXXXXXX";
+
+      setButtonVisible("ticketStatusBtn", hasPerm("ticket_status_access"));
+      setButtonVisible("lowBtn", hasPerm("view_low_rank_panel"));
+      setButtonVisible("midBtn", hasPerm("view_middle_rank_panel"));
+      setButtonVisible("highBtn", hasPerm("view_high_rank_panel"));
+      setButtonVisible("hqBtn", hasPerm("view_headquarters_panel"));
+      setButtonVisible("jcBtn", hasPerm("view_joint_chiefs_panel"));
+      setButtonVisible("ownerBtn", hasPerm("view_ownership_panel"));
+
+      if (meState.verified && meState.avatar_url) {
+        el("profileAnchor").classList.remove("hidden");
+        el("profileAvatar").src = meState.avatar_url;
+        el("profileName").textContent = meState.roblox_username || meState.username;
+        el("profileRole").textContent = meState.role_name;
+      } else {
+        el("profileAnchor").classList.add("hidden");
+      }
+    }
+
+    function verificationShell(inner) {
+      return `<div class="verification-stage">${inner}</div>`;
+    }
+
+    function renderVerificationIntro(forceLogout = false) {
+      verificationGateState = "intro";
+      showVerificationGate();
+      el("verificationPanel").innerHTML = verificationShell(`
+        <div class="verification-step">
+          <div class="verification-kicker">Identity Verification Required</div>
+          <div class="verification-lock-wrap">
+            <div class="verification-lock-ring"></div>
+            <div class="verification-lock-ring-2"></div>
+            <div class="verification-lock-core"></div>
+            <div class="verification-lock-beam"></div>
+            <div class="verification-lock">
+              <div class="verification-lock-shackle"></div>
+              <div class="verification-lock-body"></div>
+            </div>
+          </div>
+          <h1 class="verification-title">You need to verify your Roblox account!</h1>
+          <p class="verification-desc">
+            ${forceLogout
+              ? "You have been logged out of your account and thus need to verify again! Access to the website will remain locked until your identity is re-confirmed."
+              : "Before you can access the operational systems, we need to confirm that the Roblox account belongs to you."}
+          </p>
+          <div class="verification-actions">
+            <button class="btn btn-blue" id="verificationUnderstoodBtn">Understood</button>
+          </div>
+        </div>
+      `);
+      el("verificationUnderstoodBtn").onclick = () => renderVerificationInstructions(forceLogout);
+    }
+
+    function renderVerificationInstructions(forceLogout = false) {
+      verificationGateState = "instructions";
+      el("verificationPanel").innerHTML = verificationShell(`
+        <div class="verification-step">
+          <div class="verification-kicker">Step 1 of 3</div>
+          <div class="verification-card">
+            <h2 class="parchment-title">Verification Instructions</h2>
+            <p class="parchment-desc">Paste your Roblox profile link. The website will generate a one-time verification code for your account.</p>
+            <p class="parchment-desc">Put that code in your Roblox profile description, then press verify so the website can unlock your access.</p>
+            <div class="verification-actions" style="margin-top:18px;">
+              <button class="btn btn-blue" id="verificationContinueBtn">Continue</button>
+            </div>
+          </div>
+        </div>
+      `);
+      el("verificationContinueBtn").onclick = renderVerificationLinkStep;
+    }
+
+    function renderVerificationLinkStep() {
+      verificationGateState = "link";
+      el("verificationPanel").innerHTML = verificationShell(`
+        <div class="verification-step">
+          <div class="verification-kicker">Step 2 of 3</div>
+          <div class="verification-card">
+            <h2 class="parchment-title">Account Link</h2>
+            <p class="parchment-desc">Paste the Roblox profile link for the account you want to verify.</p>
+            <div class="row" style="margin-top:16px;">
+              <input class="input verification-input" id="verificationProfileLink" placeholder="https://www.roblox.com/users/.../profile">
+              <button class="btn btn-blue" id="verificationEnterBtn">Enter</button>
+            </div>
+          </div>
+        </div>
+      `);
+
+      el("verificationEnterBtn").onclick = async () => {
+        const link = el("verificationProfileLink").value.trim();
+        if (!link) return;
+
+        try {
+          const res = await api("/api/verification/start", {
+            method: "POST",
+            body: JSON.stringify({ session_key: sessionKey, profile_link: link })
+          });
+          renderVerificationCodeStep(res);
+        } catch (e) {
+          renderVerificationError(e.message || "Something went wrong, please retry.");
+        }
+      };
+    }
+
+    function renderVerificationCodeStep(res) {
+      verificationGateState = "code";
+      el("verificationPanel").innerHTML = verificationShell(`
+        <div class="verification-step">
+          <div class="verification-kicker">Step 3 of 3</div>
+          <div class="verification-card">
+            <h2 class="parchment-title">Verification Code</h2>
+            <p class="verification-desc">Put this verification code in your Roblox account description, then press verify once you're done.</p>
+            <p class="verification-desc" style="margin-top:10px;">Target account: <strong>${res.roblox_username}</strong></p>
+            <input class="input verification-code" readonly value="${res.verification_code}">
+            <div class="verification-actions" style="margin-top:16px;">
+              <button class="btn btn-green" id="verificationVerifyBtn">Verify</button>
+            </div>
+          </div>
+        </div>
+      `);
+
+      el("verificationVerifyBtn").onclick = runVerificationCheck;
+    }
+
+    function renderVerificationChecking() {
+      verificationGateState = "checking";
+      el("verificationPanel").innerHTML = verificationShell(`
+        <div class="verification-step verification-check-grid">
+          <div class="verification-kicker">Verification In Progress</div>
+          <div class="verification-lock-wrap">
+            <div class="verification-lock-ring"></div>
+            <div class="verification-lock-ring-2"></div>
+            <div class="verification-lock-core"></div>
+            <div class="verification-lock-beam"></div>
+            <div class="verification-lock">
+              <div class="verification-lock-shackle"></div>
+              <div class="verification-lock-body"></div>
+            </div>
+          </div>
+          <h1 class="verification-title">Checking...</h1>
+          <p class="verification-desc">Comparing your verification code to the database...</p>
+          <div class="verification-dots"><span></span><span></span><span></span></div>
+        </div>
+      `);
+    }
+
+    function renderVerificationSuccess() {
+      verificationGateState = "success";
+      el("verificationPanel").innerHTML = verificationShell(`
+        <div class="verification-step">
+          <div class="verification-kicker">Verification Complete</div>
+          <div class="verification-card verification-success">
+            <h1 class="verification-title">The verification has been a success!</h1>
+            <p class="verification-desc">Your Roblox identity has been confirmed. Refreshing your website access now.</p>
+          </div>
+        </div>
+      `);
+    }
+
+    function renderVerificationError(message) {
+      verificationGateState = "error";
+      el("verificationPanel").innerHTML = verificationShell(`
+        <div class="verification-step">
+          <div class="verification-kicker">Verification Failed</div>
+          <div class="verification-card verification-error">
+            <h1 class="verification-title">Something went wrong, please retry.</h1>
+            <p class="verification-desc">${message || "The verification code could not be found."}</p>
+          </div>
+          <div class="verification-actions">
+            <button class="btn btn-red" id="verificationRetryBtn">Retry</button>
+          </div>
+        </div>
+      `);
+      el("verificationRetryBtn").onclick = () => renderVerificationIntro(Boolean(meState.forced_logout));
+    }
+
+    async function runVerificationCheck() {
+      renderVerificationChecking();
+      try {
+        await new Promise(r => setTimeout(r, 700));
+        await api("/api/verification/check", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey })
+        });
+        renderVerificationSuccess();
+        setTimeout(async () => {
+          hideVerificationGate();
+          await refreshMe();
+          renderDashboard();
+        }, 800);
+      } catch (e) {
+        renderVerificationError(e.message || "Something went wrong, please retry.");
+      }
+    }
+
+    async function consumeEvent(id) {
+      await api("/api/consume-event", {
+        method: "POST",
+        body: JSON.stringify({ session_key: sessionKey, event_id: id })
+      });
+    }
+
+    async function processEvents() {
+      for (const evt of meState.events || []) {
+        if (evt.event_type === "force_logout") {
+          await consumeEvent(evt.id);
+          verificationGateState = "idle";
+          toast(evt.payload.message, 5000);
+        } else if (evt.event_type === "global_message_received") {
+          await consumeEvent(evt.id);
+          await showGlobalMessageFlow(evt.payload.message, evt.payload.duration_seconds || 30);
+        } else if (evt.event_type === "ticket_reply" || evt.event_type === "ticket_closed" || evt.event_type === "inbox_message_received") {
+          toast(evt.payload.message || "You received an update.", 2500);
+          await consumeEvent(evt.id);
+          if (currentTicketId && !ticketRenderLocked) {
+            try {
+              await openTicketThread(currentTicketId, true);
+            } catch (_) {}
+          }
+        } else if (evt.event_type === "report_blacklist_revoked" || evt.event_type === "termination_revoked") {
+          toast(evt.payload.message || "Status updated.", 3000);
+          await consumeEvent(evt.id);
+        } else if (evt.event_type === "permission_abuse_warning") {
+          toast(evt.payload.message, 4500);
+          await consumeEvent(evt.id);
+        } else if (evt.event_type === "permission_abuse_suspended") {
+          toast(evt.payload.message, 5000);
+          await consumeEvent(evt.id);
+        } else if (evt.event_type === "permission_abuse_unsuspended") {
+          toast(evt.payload.message, 4000);
+          await consumeEvent(evt.id);
+        } else if (evt.event_type === "terminated") {
+          await consumeEvent(evt.id);
+        }
+      }
+    }
+
+    function renderRestrictedJoin(message) {
+      document.body.innerHTML = `
+        <div class="restricted-screen">
+          <div class="restricted-box">
+            <h1 class="headline futuristic">Website Restricted</h1>
+            <p class="sub" style="font-size:18px;">${message}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTerminatedScreen(reason, label) {
+      document.body.innerHTML = `
+        <div class="terminated-screen">
+          <div class="terminated-box">
+            <div class="terminated-lock">
+              <div class="terminated-chain"></div>f
+              <div class="terminated-chain2"></div>
+              <div class="terminated-core">
+                <div class="terminated-shackle"></div>
+                <div class="terminated-body"></div>
+              </div>
+            </div>
+            <h1 class="headline futuristic">Website Access Restricted</h1>
+            <p class="sub" style="font-size:18px;">Reason: ${reason || "No reason provided."}</p>
+            <p class="sub" style="font-size:18px;">Duration: ${label || "PERMANENTLY"}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    async function refreshMe() {
+      const data = await api(`/api/me?session_key=${encodeURIComponent(sessionKey)}`);
+      meState = { ...meState, ...data };
+      applyState();
+      await processEvents();
+
+      if (meState.terminated) {
+        hideVerificationGate();
+        renderTerminatedScreen(meState.terminated_reason, meState.terminated_time_label);
+        return;
+      }
+
+      if (meState.suspended) {
+        hideVerificationGate();
+        el("contentArea").innerHTML = `
+          <div class="hero-card">
+            <h2 class="headline futuristic">Temporarily Suspended</h2>
+            <p class="sub">${meState.suspended_reason || "Your access has been temporarily suspended."}</p>
+          </div>
+        `;
+        return;
+      }
+
+      if (!meState.verified || meState.forced_logout) {
+        showVerificationGate();
+        if (verificationGateState === "idle") {
+          renderVerificationIntro(Boolean(meState.forced_logout));
+        }
+        return;
+      }
+
+      hideVerificationGate();
+
+      if (meState.shutdown && !["High Rank","Headquarters","Joint Chiefs","Ownership"].includes(meState.role_name)) {
+        renderShutdown(meState.shutdown.time_label);
+      }
+    }
+
+    function renderDashboard() {
+      el("contentArea").innerHTML = `
+        <div class="hero-card">
+          <div class="dashboard-top">
+            <div>
+              <h2 class="headline futuristic" style="font-size:30px;margin-top:0;text-align:left;">Operational Dashboard</h2>
+              <p class="sub" style="text-align:left;">This is the dashboard that displays important informations such as your rank, your username and it has an inbox system.</p>
+            </div>
+            <button class="dashboard-inbox" id="dashboardInboxBtn">
+              <span class="folder-big"></span>
+              ${meState.inbox_unread_count ? `<span class="count-badge">${meState.inbox_unread_count}</span>` : ""}
+            </button>
+          </div>
+
+          <div class="stats">
+            <div class="stat-card">
+              <div class="stat-label">Current Role</div>
+              <div class="stat-value">${meState.role_name}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Verification</div>
+              <div class="stat-value" style="font-size:24px;">${meState.verified ? "Verified" : "Pending"}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Custom ID</div>
+              <div class="stat-value" style="font-size:20px;">${meState.custom_id}</div>
+            </div>
+          </div>
+
+          ${meState.join_limit ? `
+            <div class="list-card">
+              New Join Limit Active: ${meState.join_limit.join_amount} per ${meState.join_limit.period_name.toLowerCase()}
+            </div>
+          ` : ""}
+        </div>
+      `;
+      el("dashboardInboxBtn").onclick = openInbox;
+    }
+
+    function renderShutdown(label) {
+      el("contentArea").innerHTML = `
+        <div class="hero-card">
+          <h2 class="headline futuristic">Website Shutdown</h2>
+          <p class="sub">The website has been shutdown for ${label}.</p>
+        </div>
+      `;
+    }
+
+    async function showGlobalMessageFlow(message, durationSeconds) {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Global Message From the Internal Affairs Headquarters</h2>
+        <div class="list-card" style="font-size:18px;line-height:1.8;">${message}</div>
+        <button class="btn btn-blue" id="globalUnderstoodBtn" style="margin-top:16px;">Understood</button>
+      `);
+      showModal("genericModal");
+
+      await new Promise(resolve => {
+        el("globalUnderstoodBtn").onclick = () => {
+          hideModal("genericModal");
+          const node = document.createElement("div");
+          node.className = "banner";
+          node.innerHTML = `
+            <div class="banner-body"><strong style="margin-right:10px;">Global Message:</strong>${message}</div>
+            <div class="banner-bar" style="animation-duration:${durationSeconds * 1000}ms"></div>
+          `;
+          el("topBanners").prepend(node);
+          setTimeout(() => node.remove(), durationSeconds * 1000 + 300);
+          resolve();
+        };
+      });
+
+      const pending = (meState.messages || []).find(m => !m.acknowledged);
+      if (pending) {
+        await api("/api/acknowledge-message", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey, message_id: pending.id })
+        });
+      }
+    }
+
+    async function confirmDeleteInbox(inboxId) {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Delete Inbox Email</h2>
+        <div class="list-card" style="text-align:center;">Are you sure to delete that inbox email?</div>
+        <div class="grid-2" style="margin-top:16px;">
+          <button class="btn btn-green" id="confirmDeleteInboxBtn">Yes</button>
+          <button class="btn btn-red" onclick="hideModal('genericModal')">No</button>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmDeleteInboxBtn").onclick = async () => {
+        await api("/api/delete-inbox-item", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey, inbox_id: inboxId })
+        });
+        hideModal("genericModal");
+        await openInbox();
+      };
+    }
+
+    async function openInbox() {
+      const data = await api(`/api/inbox?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Inbox System</h2>
+        <div class="inbox-grid">
+          ${data.items.length ? data.items.map(item => `
+            <div class="inbox-card">
+              <div class="inbox-head">
+                <div style="flex:1;">
+                  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <div class="inbox-title">${item.title}</div>
+                    ${item.unread ? `<span class="inbox-unread">New</span>` : ""}
+                  </div>
+                  <div style="margin-top:8px;line-height:1.75">${item.message}</div>
+                  <div class="inbox-meta">${new Date(item.created_at * 1000).toLocaleString()}</div>
+                </div>
+                <button class="inbox-delete" data-delete-inbox="${item.id}">×</button>
+              </div>
+            </div>
+          `).join("") : `<div class="list-card">No messages in your inbox.</div>`}
+        </div>
+      `);
+      showModal("genericModal");
+
+      await api("/api/mark-inbox-read", {
+        method: "POST",
+        body: JSON.stringify({ session_key: sessionKey })
+      });
+      await refreshMe();
+      renderDashboard();
+
+      document.querySelectorAll("[data-delete-inbox]").forEach(btn => {
+        btn.onclick = () => confirmDeleteInbox(btn.dataset.deleteInbox);
+      });
+    }
+
+    async function openAccountSwitcher() {
+      const data = await api(`/api/logged-accounts?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <div class="parchment">
+          <h2 class="parchment-title">Logged Accounts</h2>
+          <p class="parchment-desc">Logged in the wrong account? You can log out and redo the verification process.</p>
+          <div class="parchment-list">
+            ${data.items.length ? data.items.map(item => `
+              <div class="parchment-row">
+                <img src="${item.avatar_url || ""}" alt="avatar">
+                <div style="display:grid;">
+                  <strong>${item.roblox_username || item.username}</strong>
+                  <span style="font-size:12px;color:#7b5830;">${item.role_name} • ${item.custom_id}</span>
+                </div>
+              </div>
+            `).join("") : `<div class="parchment-row"><div>No verified accounts found.</div></div>`}
+          </div>
+          <div class="grid-2" style="margin-top:18px;">
+            <button class="btn btn-red" id="logoutRedoBtn">Log Out</button>
+            <button class="btn btn-blue" onclick="hideModal('genericModal')">Close</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+
+      el("logoutRedoBtn").onclick = async () => {
+        await api("/api/logout", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey })
+        });
+        hideModal("genericModal");
+        verificationGateState = "idle";
+        await refreshMe();
+        renderDashboard();
+      };
+    }
+
+    function openReportModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Divisional Report</h2>
+        <div class="row">
+          <input class="input" id="reportUsername" placeholder="Username">
+          <select class="select" id="reportDivision">
+            <option value="">Division</option>
+            <option>APU</option>
+            <option>SWAT</option>
+            <option>TCU</option>
+            <option>SPD</option>
+            <option>Internal Affairs</option>
+          </select>
+          <select class="select" id="reportUrgency">
+            <option value="">Urgency</option>
+            <option>Low</option>
+            <option>Middle</option>
+            <option>High</option>
+          </select>
+          <textarea id="reportReason" placeholder="Reason of your report"></textarea>
+          <textarea id="reportEvidence" placeholder="Evidence"></textarea>
+          <div class="grid-2">
+            <button class="btn btn-green" id="submitReportBtn">Submit</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("submitReportBtn").onclick = async () => {
+        await api("/api/report", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            target_username: el("reportUsername").value.trim(),
+            division: el("reportDivision").value,
+            urgency: el("reportUrgency").value,
+            reason: el("reportReason").value.trim(),
+            evidence: el("reportEvidence").value.trim()
+          })
+        });
+        hideModal("genericModal");
+        toast("Report submitted successfully.", 2500);
+      };
+    }
+
+    async function startAppealBot() {
+      const questions = [
+        "What punishment did you received and why?",
+        "Did you learned from your actions?",
+        "What will you do to avoid such thing from happening again in the future?",
+        "Do you have anything to add?"
+      ];
+      const answers = {};
+
+      el("genericModalBox").innerHTML = modalChrome(`
+        <div class="chat-shell">
+          <div class="chat-header">
+            <div class="bot-pfp"></div>
+            <div>
+              <div style="font-weight:900;">Professional Standards Intelligent Affairs System</div>
+              <div style="font-size:12px;color:var(--muted);">Appeal bot interface</div>
+            </div>
+          </div>
+          <div class="chat-body" id="appealChatBody"></div>
+          <div class="chat-controls" id="appealChatControls"></div>
+        </div>
+      `);
+      showModal("genericModal");
+
+      const body = document.getElementById("appealChatBody");
+      const controls = document.getElementById("appealChatControls");
+
+      const botMessage = (text) => {
+        body.innerHTML += `<div class="chat-msg"><div class="bot-pfp" style="width:38px;height:38px;min-width:38px;min-height:38px;"></div><div class="chat-bubble">${text}</div></div>`;
+        body.scrollTop = body.scrollHeight;
+      };
+      const userMessage = (text) => {
+        body.innerHTML += `<div class="chat-msg" style="justify-content:flex-end;"><div class="chat-bubble" style="max-width:80%;">${text}</div></div>`;
+        body.scrollTop = body.scrollHeight;
+      };
+      const typing = () => {
+        body.innerHTML += `<div class="chat-msg" id="appealTyping"><div class="bot-pfp" style="width:38px;height:38px;min-width:38px;min-height:38px;"></div><div class="chat-bubble"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
+      };
+      const clearTyping = () => {
+        const node = document.getElementById("appealTyping");
+        if (node) node.remove();
+      };
+
+      botMessage("Hello, im the Appeal bot. Here, i will ask numerous questions that determines whether you have the qualifications necessary for a good appeal.");
+      controls.innerHTML = `<button class="btn btn-blue" id="appealUnderstoodBtn">Understood</button>`;
+
+      document.getElementById("appealUnderstoodBtn").onclick = async () => {
+        body.innerHTML = "";
+        for (let i = 0; i < questions.length; i++) {
+          typing();
+          await new Promise(r => setTimeout(r, 700));
+          clearTyping();
+          botMessage(questions[i]);
+          controls.innerHTML = `<textarea id="appealAnswerBox" placeholder="Write your answer here"></textarea><button class="btn btn-green" id="sendAppealAnswerBtn">Send</button>`;
+          await new Promise(resolve => {
+            document.getElementById("sendAppealAnswerBtn").onclick = () => {
+              const answer = document.getElementById("appealAnswerBox").value.trim();
+              if (!answer) return;
+              answers[i] = answer;
+              userMessage(answer);
+              resolve();
+            };
+          });
+        }
+        controls.innerHTML = `<div class="list-card" style="text-align:center;">Calculating appeal score...</div>`;
+        await api("/api/appeal", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            punishment_details: answers[0] || "",
+            learned_answer: answers[1] || "",
+            future_answer: answers[2] || "",
+            extra_answer: answers[3] || ""
+          })
+        });
+        botMessage("Thank you for your appeal, an Internal Affairs Middle Rank will evaluate your appeal and update you in a few days or so.");
+        controls.innerHTML = `<button class="btn btn-blue" onclick="hideModal('genericModal')">Close</button>`;
+      };
+    }
+
+    async function openContact() {
+      const my = await api(`/api/tickets/my?session_key=${encodeURIComponent(sessionKey)}`);
+      const openTicket = (my.items || []).find(x => x.status === "OPEN");
+      if (openTicket) return openTicketThread(openTicket.id);
+
+      el("genericModalBox").innerHTML = modalChrome(`
+        <div class="chat-shell">
+          <div class="chat-header">
+            <div class="bot-pfp"></div>
+            <div>
+              <div style="font-weight:900;">Internal Affairs Manual System</div>
+              <div style="font-size:12px;color:var(--muted);">Contact assistance</div>
+            </div>
+          </div>
+          <div class="chat-body">
+            <div class="chat-msg"><div class="bot-pfp" style="width:38px;height:38px;min-width:38px;min-height:38px;"></div><div class="chat-bubble">Hello, thank you for contacting us. An Internal Affairs agent will speak to you shortly.</div></div>
+            <div class="chat-msg"><div class="bot-pfp" style="width:38px;height:38px;min-width:38px;min-height:38px;"></div><div class="chat-bubble">What do you need help with?</div></div>
+          </div>
+          <div class="chat-controls">
+            <textarea id="contactSubjectBox" placeholder="Write what you need help with"></textarea>
+            <div class="grid-2">
+              <button class="btn btn-green" id="sendContactBtn">Send</button>
+              <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+            </div>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+
+      el("sendContactBtn").onclick = async () => {
+        const subject = el("contactSubjectBox").value.trim();
+        if (!subject) return;
+        const res = await api("/api/contact/open", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey, subject })
+        });
+        toast("An Internal Affairs Agent will be with you shortly.", 2000);
+        openTicketThread(res.ticket_id);
+      };
+    }
+
+    function stopTicketPolling() {
+      if (threadPollTimer) clearInterval(threadPollTimer);
+      threadPollTimer = null;
+      currentTicketId = null;
+      currentTicketDraft = "";
+      currentTicketCloseDraft = "";
+      currentTicketViewMode = "thread";
+      ticketRenderLocked = false;
+    }
+
+    function startTicketPolling(ticketId) {
+      if (threadPollTimer) clearInterval(threadPollTimer);
+      currentTicketId = ticketId;
+      threadPollTimer = setInterval(async () => {
+        if (!el("genericModal") || el("genericModal").classList.contains("hidden")) {
+          stopTicketPolling();
+          return;
+        }
+        if (ticketRenderLocked) return;
+        try {
+          await openTicketThread(ticketId, true);
+        } catch (_) {}
+      }, 1200);
+    }
+
+    function buildTicketThreadMarkup(ticket, messages) {
+      return modalChrome(`
+        <div class="chat-shell">
+          <div class="chat-header">
+            <div class="bot-pfp"></div>
+            <div style="flex:1;">
+              <div style="font-weight:900;">Internal Affairs Manual System</div>
+              <div style="font-size:12px;color:var(--muted);">${ticket.opener_username} • ${ticket.subject}</div>
+            </div>
+            ${hasPerm("handle_tickets") ? `<button class="btn btn-red" id="closeTicketBtn" style="width:auto;padding:10px 14px;">Close Ticket</button>` : ""}
+          </div>
+          <div class="chat-body">
+            ${messages.map(msg => `
+              <div class="chat-msg" style="${msg.sender_custom_id === meState.custom_id ? "justify-content:flex-end;" : ""}">
+                ${msg.sender_custom_id === meState.custom_id ? "" : `<div class="bot-pfp" style="width:38px;height:38px;min-width:38px;min-height:38px;"></div>`}
+                <div class="chat-bubble" style="max-width:78%;"><strong>${msg.sender_username}</strong><br>${msg.message}</div>
+              </div>
+            `).join("")}
+          </div>
+          <div class="chat-controls">
+            ${hasPerm("handle_tickets") && !ticket.claimed_by_custom_id ? `<button class="btn btn-blue" id="claimTicketBtn">Handle</button>` : ""}
+            ${ticket.status === "OPEN" ? `
+              <textarea id="ticketReplyBox" placeholder="Write your reply">${currentTicketDraft}</textarea>
+              <button class="btn btn-green" id="sendTicketReplyBtn">Send</button>
+            ` : `<div class="list-card">This ticket is closed. Reason: ${ticket.close_reason || "No reason provided."}</div>`}
+          </div>
+        </div>
+      `);
+    }
+
+    function buildTicketCloseMarkup(ticketId) {
+      return modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Close Ticket</h2>
+        <div class="row">
+          <textarea id="closeReasonBox" placeholder="Reason">${currentTicketCloseDraft}</textarea>
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmCloseTicketBtn">Close</button>
+            <button class="btn btn-red" id="backToThreadBtn">Back</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function bindTicketThreadActions(ticketId) {
+      const claimBtn = document.getElementById("claimTicketBtn");
+      if (claimBtn) {
+        claimBtn.onclick = async () => {
+          ticketRenderLocked = true;
+          try {
+            await api("/api/tickets/claim", {
+              method: "POST",
+              body: JSON.stringify({ session_key: sessionKey, ticket_id: ticketId })
+            });
+            await openTicketThread(ticketId, true);
+          } finally {
+            ticketRenderLocked = false;
+          }
+        };
+      }
+
+      const replyBox = document.getElementById("ticketReplyBox");
+      if (replyBox) {
+        replyBox.addEventListener("input", () => {
+          currentTicketDraft = replyBox.value;
+        });
+      }
+
+      const sendBtn = document.getElementById("sendTicketReplyBtn");
+      if (sendBtn) {
+        sendBtn.onclick = async () => {
+          const message = (document.getElementById("ticketReplyBox")?.value || "").trim();
+          if (!message) return;
+          ticketRenderLocked = true;
+          try {
+            await api("/api/tickets/reply", {
+              method: "POST",
+              body: JSON.stringify({
+                session_key: sessionKey,
+                ticket_id: ticketId,
+                message
+              })
+            });
+            currentTicketDraft = "";
+            await openTicketThread(ticketId, true);
+          } finally {
+            ticketRenderLocked = false;
+          }
+        };
+      }
+
+      const closeBtn = document.getElementById("closeTicketBtn");
+      if (closeBtn) {
+        closeBtn.onclick = () => {
+          currentTicketViewMode = "close";
+          el("genericModalBox").innerHTML = buildTicketCloseMarkup(ticketId);
+          showModal("genericModal");
+
+          const closeReasonBox = document.getElementById("closeReasonBox");
+          if (closeReasonBox) {
+            closeReasonBox.addEventListener("input", () => {
+              currentTicketCloseDraft = closeReasonBox.value;
+            });
+          }
+
+          document.getElementById("backToThreadBtn").onclick = async () => {
+            currentTicketViewMode = "thread";
+            await openTicketThread(ticketId, true);
+          };
+
+          document.getElementById("confirmCloseTicketBtn").onclick = async () => {
+            const reason = (document.getElementById("closeReasonBox")?.value || "").trim();
+            if (!reason) return;
+            ticketRenderLocked = true;
+            try {
+              await api("/api/tickets/close", {
+                method: "POST",
+                body: JSON.stringify({
+                  session_key: sessionKey,
+                  ticket_id: ticketId,
+                  reason
+                })
+              });
+              currentTicketCloseDraft = "";
+              currentTicketViewMode = "thread";
+              await openTicketThread(ticketId, true);
+            } finally {
+              ticketRenderLocked = false;
+            }
+          };
+        };
+      }
+    }
+
+    async function openTicketThread(ticketId, silent = false) {
+      const data = await api(`/api/tickets/thread?session_key=${encodeURIComponent(sessionKey)}&ticket_id=${ticketId}`);
+      const ticket = data.ticket;
+
+      if (!threadPollTimer || currentTicketId !== ticketId) {
+        startTicketPolling(ticketId);
+      }
+
+      if (currentTicketViewMode === "close") {
+        el("genericModalBox").innerHTML = buildTicketCloseMarkup(ticketId);
+        if (!silent) showModal("genericModal");
+
+        const closeReasonBox = document.getElementById("closeReasonBox");
+        if (closeReasonBox) {
+          closeReasonBox.addEventListener("input", () => {
+            currentTicketCloseDraft = closeReasonBox.value;
+          });
+        }
+
+        document.getElementById("backToThreadBtn").onclick = async () => {
+          currentTicketViewMode = "thread";
+          await openTicketThread(ticketId, true);
+        };
+
+        document.getElementById("confirmCloseTicketBtn").onclick = async () => {
+          const reason = (document.getElementById("closeReasonBox")?.value || "").trim();
+          if (!reason) return;
+          ticketRenderLocked = true;
+          try {
+            await api("/api/tickets/close", {
+              method: "POST",
+              body: JSON.stringify({
+                session_key: sessionKey,
+                ticket_id: ticketId,
+                reason
+              })
+            });
+            currentTicketCloseDraft = "";
+            currentTicketViewMode = "thread";
+            await openTicketThread(ticketId, true);
+          } finally {
+            ticketRenderLocked = false;
+          }
+        };
+        return;
+      }
+
+      const activeReply = document.getElementById("ticketReplyBox");
+      if (activeReply) {
+        currentTicketDraft = activeReply.value;
+      }
+
+      el("genericModalBox").innerHTML = buildTicketThreadMarkup(ticket, data.messages);
+      if (!silent) showModal("genericModal");
+      bindTicketThreadActions(ticketId);
+    }
+
+    async function renderTicketStatus() {
+      const data = await api(`/api/tickets/my?session_key=${encodeURIComponent(sessionKey)}`);
+      el("contentArea").innerHTML = `
+        <div class="content-card">
+          <h2 class="headline futuristic" style="font-size:28px;">Ticket Status</h2>
+          ${data.items.length ? data.items.map(t => `
+            <div class="list-card">
+              <strong>${t.subject}</strong><br>
+              Status: ${t.status}<br>
+              ${t.claimed_by_username ? `Handled By: ${t.claimed_by_username}<br>` : "Handled By: Not yet assigned<br>"}
+              ${t.close_reason ? `Close Reason: ${t.close_reason}` : ""}
+              <div style="margin-top:12px;">
+                <button class="btn btn-blue" data-my-ticket="${t.id}">Open</button>
+              </div>
+            </div>
+          `).join("") : `<div class="list-card">You do not have any tickets.</div>`}
+        </div>
+      `;
+      document.querySelectorAll("[data-my-ticket]").forEach(btn => {
+        btn.onclick = () => openTicketThread(Number(btn.dataset.myTicket));
+      });
+    }
+
+    async function renderLowPanel() {
+      const tickets = hasPerm("view_tickets")
+        ? await api(`/api/tickets/all?session_key=${encodeURIComponent(sessionKey)}`).catch(() => ({ items: [] }))
+        : { items: [] };
+
+      el("contentArea").innerHTML = `
+        <div class="content-card">
+          <h2 class="headline futuristic" style="font-size:28px;">Internal Affairs Low Rank Panel</h2>
+          <div class="action-grid">
+            <button class="panel-button" id="reportBlacklistBtn">Report Blacklist</button>
+            <button class="panel-button" id="sendInboxBtn">Send Message in Inbox</button>
+          </div>
+          <div class="separator"></div>
+          <h3 class="headline futuristic" style="font-size:22px;">Contact Database</h3>
+          ${tickets.items.length ? tickets.items.map(t => `
+            <div class="list-card">
+              <strong>${t.opener_username}</strong><br>
+              Reason: ${t.subject}<br>
+              Status: ${t.status}<br>
+              ${t.claimed_by_username ? `Handled By: ${t.claimed_by_username}` : "Handled By: Nobody yet"}
+              <div class="grid-2" style="margin-top:12px;">
+                <button class="btn btn-green" data-ticket-handle="${t.id}">Handle</button>
+                <button class="btn btn-blue" data-ticket-view="${t.id}">View</button>
+              </div>
+            </div>
+          `).join("") : `<div class="list-card">No tickets found.</div>`}
+        </div>
+      `;
+
+      el("reportBlacklistBtn").onclick = openReportBlacklistModal;
+      el("sendInboxBtn").onclick = openSendInboxMessageModal;
+      document.querySelectorAll("[data-ticket-handle]").forEach(btn => btn.onclick = () => openTicketThread(Number(btn.dataset.ticketHandle)));
+      document.querySelectorAll("[data-ticket-view]").forEach(btn => btn.onclick = () => openTicketThread(Number(btn.dataset.ticketView)));
+    }
+
+    function renderMiddlePanel() {
+      el("contentArea").innerHTML = `
+        <div class="content-card">
+          <h2 class="headline futuristic" style="font-size:28px;">Internal Affairs Middle Rank Panel</h2>
+          <div class="action-grid">
+            <button class="panel-button" id="forceLogoutBtn">Force Logout</button>
+            <button class="panel-button" id="givePermsBtn">Give Permissions</button>
+            <button class="panel-button" id="appealsBtn">Appeal Database</button>
+          </div>
+        </div>
+      `;
+      el("forceLogoutBtn").onclick = openForceLogoutModal;
+      el("givePermsBtn").onclick = openGivePermissionsModal;
+      el("appealsBtn").onclick = openAppealsModal;
+    }
+
+    function renderHighPanel() {
+      el("contentArea").innerHTML = `
+        <div class="content-card">
+          <h2 class="headline futuristic" style="font-size:28px;">Internal Affairs High Rank Panel</h2>
+          <div class="action-grid">
+            <button class="panel-button" id="terminateBtn">Terminate</button>
+            <button class="panel-button" id="revokeTerminateBtn">Revoke Terminate</button>
+            <button class="panel-button" id="blacklistBtn">Report Blacklist</button>
+            <button class="panel-button" id="revokeBlacklistBtn">Revoke Report Blacklist</button>
+            <button class="panel-button" id="removePermsBtn">Remove Permissions</button>
+            <button class="panel-button" id="permissionAbuseDbBtn">Permission Abuse Database</button>
+            <button class="panel-button" id="bulkForceLogoutBtn">Bulk Force Logout</button>
+          </div>
+        </div>
+      `;
+      el("terminateBtn").onclick = openTerminateModal;
+      el("revokeTerminateBtn").onclick = openRevokeTerminateModal;
+      el("blacklistBtn").onclick = openReportBlacklistModal;
+      el("revokeBlacklistBtn").onclick = openRevokeBlacklistModal;
+      el("removePermsBtn").onclick = openRemovePermissionsModal;
+      el("permissionAbuseDbBtn").onclick = openPermissionAbuseDb;
+      el("bulkForceLogoutBtn").onclick = openBulkForceLogoutModal;
+    }
+
+    function renderHqPanel() {
+      el("contentArea").innerHTML = `
+        <div class="content-card">
+          <h2 class="headline futuristic" style="font-size:28px;">Internal Affairs Headquarters Panel</h2>
+          <div class="action-grid">
+            <button class="panel-button" id="checkInfoBtn">Check Information</button>
+            <button class="panel-button" id="sendGlobalBtn">Send Global Message</button>
+          </div>
+        </div>
+      `;
+      el("checkInfoBtn").onclick = openCheckInfoModal;
+      el("sendGlobalBtn").onclick = openSendGlobalMessageModal;
+    }
+
+    function renderJcPanel() {
+      el("contentArea").innerHTML = `
+        <div class="content-card">
+          <h2 class="headline futuristic" style="font-size:28px;">Joint Chiefs Panel</h2>
+          <div class="action-grid">
+            <button class="panel-button" id="shutdownBtn">Temporary Website Shutdown</button>
+            <button class="panel-button" id="removeShutdownBtn">Remove Website Shutdown</button>
+          </div>
+        </div>
+      `;
+      el("shutdownBtn").onclick = openShutdownModal;
+      el("removeShutdownBtn").onclick = async () => {
+        await api("/api/website-shutdown/clear", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey })
+        });
+        toast("Website shutdown removed.", 2500);
+        refreshMe();
+      };
+    }
+
+    function renderOwnershipPanel() {
+      el("contentArea").innerHTML = `
+        <div class="content-card">
+          <h2 class="headline futuristic" style="font-size:28px;">Ownership Panel</h2>
+          <div class="action-grid">
+            <button class="panel-button" id="ownerForceLogoutBtn">Force Logout</button>
+            <button class="panel-button" id="ownerTerminateBtn">Terminate</button>
+            <button class="panel-button" id="ownerRevokeTerminateBtn">Revoke Terminate</button>
+            <button class="panel-button" id="ownerBlacklistBtn">Report Blacklist</button>
+            <button class="panel-button" id="ownerRevokeBlacklistBtn">Revoke Report Blacklist</button>
+            <button class="panel-button" id="ownerCheckInfoBtn">Check Information</button>
+            <button class="panel-button" id="ownerGlobalBtn">Send Global Message</button>
+            <button class="panel-button" id="ownerShutdownBtn">Temporary Website Shutdown</button>
+            <button class="panel-button" id="ownerAbuseDbBtn">Permission Abuse Database</button>
+            <button class="panel-button" id="ownerAppealsBtn">Appeal Database</button>
+            <button class="panel-button btn-gold" id="ownerJoinLimitBtn">Reduce Amount of New Joins</button>
+            <button class="panel-button btn-red" id="ownerRevokeJoinLimitBtn">Revoke Join Limit</button>
+          </div>
+        </div>
+      `;
+      el("ownerForceLogoutBtn").onclick = openForceLogoutModal;
+      el("ownerTerminateBtn").onclick = openTerminateModal;
+      el("ownerRevokeTerminateBtn").onclick = openRevokeTerminateModal;
+      el("ownerBlacklistBtn").onclick = openReportBlacklistModal;
+      el("ownerRevokeBlacklistBtn").onclick = openRevokeBlacklistModal;
+      el("ownerCheckInfoBtn").onclick = openCheckInfoModal;
+      el("ownerGlobalBtn").onclick = openSendGlobalMessageModal;
+      el("ownerShutdownBtn").onclick = openShutdownModal;
+      el("ownerAbuseDbBtn").onclick = openPermissionAbuseDb;
+      el("ownerAppealsBtn").onclick = openAppealsModal;
+      el("ownerJoinLimitBtn").onclick = openJoinLimitModal;
+      el("ownerRevokeJoinLimitBtn").onclick = revokeJoinLimitNow;
+    }
+
+    async function openForceLogoutModal() {
+      const data = await api(`/api/logged-users?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Force Logout</h2>
+        <div class="row">
+          <select class="select" id="forceLogoutUser">
+            <option value="">Select user</option>
+            ${data.users.map(u => `<option value="${u.custom_id}">${u.roblox_username || u.username} | ${u.custom_id} | ${u.role_name}</option>`).join("")}
+          </select>
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmForceLogoutBtn">Force Logout</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmForceLogoutBtn").onclick = async () => {
+        await api("/api/force-logout", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey, target_custom_id: el("forceLogoutUser").value })
+        });
+        hideModal("genericModal");
+        toast("Force logout applied.", 2500);
+      };
+    }
+
+    async function openBulkForceLogoutModal() {
+      const data = await api(`/api/logged-users?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Bulk Force Logout</h2>
+        <div class="row">
+          <textarea id="bulkReason" placeholder="Reason"></textarea>
+          <div class="list-card" style="max-height:40vh;overflow:auto;">
+            ${data.users.map(u => `<label><input type="checkbox" name="bulkTarget" value="${u.custom_id}"> ${u.roblox_username || u.username} | ${u.custom_id} | ${u.role_name}</label><br>`).join("")}
+          </div>
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmBulkForceBtn">Apply</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmBulkForceBtn").onclick = async () => {
+        const target_custom_ids = [...document.querySelectorAll("input[name='bulkTarget']:checked")].map(x => x.value);
+        await api("/api/bulk-force-logout", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            target_custom_ids,
+            reason: el("bulkReason").value.trim()
+          })
+        });
+        hideModal("genericModal");
+        toast("Bulk force logout applied.", 2500);
+      };
+    }
+
+    function openGivePermissionsModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Give Permissions</h2>
+        <div class="row">
+          <input class="input" id="givePermTarget" placeholder="Target Custom ID">
+          <div class="list-card">
+            ${meState.grantable_permissions.length ? meState.grantable_permissions.map(p => `<label><input type="checkbox" name="grantPerm" value="${p}"> ${p}</label><br>`).join("") : "No lower permissions available."}
+          </div>
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmGivePermBtn">Grant</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmGivePermBtn").onclick = async () => {
+        const permissions = [...document.querySelectorAll("input[name='grantPerm']:checked")].map(x => x.value);
+        await api("/api/give-permissions", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            target_custom_id: el("givePermTarget").value.trim(),
+            permissions
+          })
+        });
+        hideModal("genericModal");
+        toast("Permissions granted.", 2500);
+      };
+    }
+
+    function openRemovePermissionsModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Remove Permissions</h2>
+        <div class="row">
+          <input class="input" id="removePermTarget" placeholder="Target Custom ID">
+          <div class="list-card">
+            <label><input type="checkbox" name="removePerm" value="view_low_rank_panel"> view_low_rank_panel</label><br>
+            <label><input type="checkbox" name="removePerm" value="view_middle_rank_panel"> view_middle_rank_panel</label><br>
+            <label><input type="checkbox" name="removePerm" value="report_blacklist"> report_blacklist</label><br>
+            <label><input type="checkbox" name="removePerm" value="send_inbox_message"> send_inbox_message</label><br>
+            <label><input type="checkbox" name="removePerm" value="give_permissions"> give_permissions</label><br>
+          </div>
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmRemovePermBtn">Remove</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmRemovePermBtn").onclick = async () => {
+        const permissions = [...document.querySelectorAll("input[name='removePerm']:checked")].map(x => x.value);
+        await api("/api/remove-permissions", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            target_custom_id: el("removePermTarget").value.trim(),
+            permissions
+          })
+        });
+        hideModal("genericModal");
+        toast("Permissions removed.", 2500);
+      };
+    }
+
+    async function openTerminateModal() {
+      const data = await api(`/api/logged-users?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Terminate</h2>
+        <div class="row">
+          <select class="select" id="termTargetSelect">
+            <option value="">Select user</option>
+            ${data.users.map(u => `<option value="${u.custom_id}">${u.roblox_username || u.username} | ${u.custom_id} | ${u.role_name}</option>`).join("")}
+          </select>
+          <input class="input" id="termTargetText" placeholder="Or type Username / Custom ID">
+          <textarea id="termReason" placeholder="Reason"></textarea>
+          <input class="input" id="termTime" placeholder="7D, 2W, 1M or PERMANENTLY">
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmTerminateBtn">Confirm</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmTerminateBtn").onclick = async () => {
+        const target_ref = el("termTargetSelect").value || el("termTargetText").value.trim();
+        await api("/api/terminate", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            target_ref,
+            reason: el("termReason").value.trim(),
+            time: el("termTime").value.trim()
+          })
+        });
+        hideModal("genericModal");
+        toast("Termination applied.", 2500);
+      };
+    }
+
+    async function openRevokeTerminateModal() {
+      const data = await api(`/api/terminations?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Revoke Terminate</h2>
+        <div class="row">
+          <select class="select" id="revokeTerminateUser">
+            <option value="">Select terminated user</option>
+            ${data.items.map(x => `<option value="${x.username}">${x.username} | ${x.custom_id || "N/A"} | ${x.time_label}</option>`).join("")}
+          </select>
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmRevokeTerminateBtn">Revoke</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmRevokeTerminateBtn").onclick = async () => {
+        await api("/api/revoke-terminate", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey, target_username: el("revokeTerminateUser").value })
+        });
+        hideModal("genericModal");
+        toast("Termination revoked.", 2500);
+      };
+    }
+
+    function openReportBlacklistModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Report Blacklist</h2>
+        <div class="row">
+          <input class="input" id="blacklistTarget" placeholder="Username or Custom ID">
+          <textarea id="blacklistReason" placeholder="Reason"></textarea>
+          <input class="input" id="blacklistTime" placeholder="7D, 2W, 1M or PERMANENTLY">
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmBlacklistBtn">Confirm</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmBlacklistBtn").onclick = async () => {
+        await api("/api/report-blacklist", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            target_ref: el("blacklistTarget").value.trim(),
+            reason: el("blacklistReason").value.trim(),
+            time: el("blacklistTime").value.trim()
+          })
+        });
+        hideModal("genericModal");
+        toast("Report blacklist applied.", 2500);
+      };
+    }
+
+    async function openRevokeBlacklistModal() {
+      const data = await api(`/api/report-blacklists?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Revoke Report Blacklist</h2>
+        <div class="row">
+          <select class="select" id="revokeBlacklistUser">
+            <option value="">Select blacklisted user</option>
+            ${data.items.map(x => `<option value="${x.username}">${x.username} | ${x.custom_id || "N/A"} | ${x.time_label}</option>`).join("")}
+          </select>
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmRevokeBlacklistBtn">Revoke</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmRevokeBlacklistBtn").onclick = async () => {
+        await api("/api/revoke-report-blacklist", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey, target_username: el("revokeBlacklistUser").value })
+        });
+        hideModal("genericModal");
+        toast("Report blacklist revoked.", 2500);
+      };
+    }
+
+    function openSendInboxMessageModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Send Message in Inbox</h2>
+        <div class="row">
+          <input class="input" id="inboxTargetId" placeholder="Custom ID">
+          <textarea id="inboxMessageText" placeholder="Message"></textarea>
+          <div class="grid-2">
+            <button class="btn btn-green" id="sendInboxMessageBtn">Send</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("sendInboxMessageBtn").onclick = async () => {
+        await api("/api/send-inbox-message", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            target_custom_id: el("inboxTargetId").value.trim(),
+            message: el("inboxMessageText").value.trim()
+          })
+        });
+        hideModal("genericModal");
+        toast("Inbox message sent.", 2500);
+      };
+    }
+
+    function openCheckInfoModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Check Information</h2>
+        <div class="row">
+          <input class="input" id="checkInfoTarget" placeholder="Custom ID">
+          <div class="grid-2">
+            <button class="btn btn-green" id="runCheckBtn">Check</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("runCheckBtn").onclick = async () => {
+        const data = await api("/api/check-information", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey, target_custom_id: el("checkInfoTarget").value.trim() })
+        });
+        el("genericModalBox").innerHTML = modalChrome(`
+          <h2 class="headline futuristic" style="font-size:28px;">Information Found</h2>
+          <div class="list-card">
+            Username: ${data.username}<br>
+            Custom ID: ${data.custom_id}<br>
+            Role: ${data.role_name}<br>
+            Report Blacklisted: ${data.report_blacklisted ? "Yes" : "No"}<br>
+            Terminated: ${data.terminated ? "Yes" : "No"}<br>
+            ${data.termination_reason ? `Termination Reason: ${data.termination_reason}` : ""}
+          </div>
+        `);
+      };
+    }
+
+    function openSendGlobalMessageModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Send Global Message</h2>
+        <div class="row">
+          <textarea id="globalMessageText" placeholder="Message"></textarea>
+          <input class="input" id="globalMessageDuration" placeholder="Duration in seconds">
+          <div class="grid-2">
+            <button class="btn btn-green" id="sendGlobalMessageBtn">Send</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("sendGlobalMessageBtn").onclick = async () => {
+        await api("/api/send-global-message", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            message: el("globalMessageText").value.trim(),
+            duration_seconds: Number(el("globalMessageDuration").value || 30)
+          })
+        });
+        hideModal("genericModal");
+        toast("Global message sent.", 2500);
+      };
+    }
+
+    function openShutdownModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Temporary Website Shutdown</h2>
+        <div class="row">
+          <input class="input" id="shutdownTime" placeholder="30S, 2H, 3D, 2W or 1M">
+          <div class="grid-2">
+            <button class="btn btn-green" id="confirmShutdownBtn">Shutdown the Website</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmShutdownBtn").onclick = async () => {
+        const data = await api("/api/website-shutdown", {
+          method: "POST",
+          body: JSON.stringify({ session_key: sessionKey, time: el("shutdownTime").value.trim() })
+        });
+        hideModal("genericModal");
+        toast(`Website shutdown enabled for ${data.time_label}.`, 2500);
+        refreshMe();
+      };
+    }
+
+    function openJoinLimitModal() {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Reduce Amount of New Joins</h2>
+        <div class="row">
+          <input class="input" id="joinLimitAmount" placeholder="How many joins">
+          <div id="joinLimitRevealWrap"></div>
+          <div class="grid-2">
+            <button class="btn btn-gold" id="joinLimitRevealBtn">Reveal Per...</button>
+            <button class="btn btn-green" id="joinLimitApplyBtn">Apply</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+
+      el("joinLimitRevealBtn").onclick = () => {
+        el("joinLimitRevealWrap").innerHTML = `
+          <select class="select" id="joinLimitPeriod">
+            <option value="">Per...</option>
+            <option value="SECOND">Per second</option>
+            <option value="HOUR">Per hour</option>
+            <option value="DAY">Per day</option>
+            <option value="WEEK">Per week</option>
+            <option value="MONTH">Per month</option>
+          </select>
+        `;
+      };
+
+      el("joinLimitApplyBtn").onclick = async () => {
+        const amount = Number(el("joinLimitAmount").value || 0);
+        const periodNode = document.getElementById("joinLimitPeriod");
+        const period_name = periodNode ? periodNode.value : "";
+        await api("/api/join-limit", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            join_amount: amount,
+            period_name
+          })
+        });
+        hideModal("genericModal");
+        toast("Join limit applied.", 2500);
+        await refreshMe();
+        renderOwnershipPanel();
+      };
+    }
+
+    async function revokeJoinLimitNow() {
+      await api("/api/join-limit/revoke", {
+        method: "POST",
+        body: JSON.stringify({ session_key: sessionKey })
+      });
+      topSlider("The Join Limit has been revoked.", 5400);
+      await refreshMe();
+      renderOwnershipPanel();
+    }
+
+    async function openPermissionAbuseDb() {
+      const data = await api(`/api/permission-abuse/list?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Permission Abuse Database</h2>
+        <div class="row" style="max-height:62vh;overflow:auto;">
+          ${data.items.length ? data.items.map(item => `
+            <div class="list-card">
+              <strong>${item.abuser_username}</strong> (${item.abuser_custom_id})<br>
+              Role: ${item.abuser_role_name}<br>
+              Tried to use: ${item.action_name}<br>
+              Against: ${item.target_username} (${item.target_custom_id || "N/A"})<br>
+              Against Role: ${item.target_role_name}<br>
+              Warnings: ${item.warning_count}<br>
+              Suspended: ${item.suspended ? "Yes" : "No"}<br>
+              <button class="btn btn-green" data-unsuspend="${item.abuser_custom_id}" style="margin-top:12px;">Unsuspend</button>
+            </div>
+          `).join("") : `<div class="list-card">No active permission abuse cases.</div>`}
+        </div>
+      `);
+      showModal("genericModal");
+      document.querySelectorAll("[data-unsuspend]").forEach(btn => {
+        btn.onclick = async () => {
+          await api("/api/permission-abuse/unsuspend", {
+            method: "POST",
+            body: JSON.stringify({ session_key: sessionKey, abuser_custom_id: btn.dataset.unsuspend })
+          });
+          openPermissionAbuseDb();
+        };
+      });
+    }
+
+    async function openAppealsModal() {
+      const data = await api(`/api/appeals?session_key=${encodeURIComponent(sessionKey)}`);
+      el("genericModalBox").innerHTML = modalChrome(`
+        <h2 class="headline futuristic" style="font-size:28px;">Appeal Database</h2>
+        <div class="row" style="max-height:60vh;overflow:auto;">
+          ${data.items.length ? data.items.map(item => `
+            <div class="list-card">
+              <strong>${item.appellant_username}</strong> (${item.appellant_custom_id})<br>
+              Overall Score: ${item.overall_score}%<br>
+              Status: ${item.status}<br>
+              Created: ${new Date(item.created_at * 1000).toLocaleString()}
+            </div>
+          `).join("") : `<div class="list-card">No appeals found.</div>`}
+        </div>
+      `);
+      showModal("genericModal");
+    }
+
+    el("dashboardBtn").onclick = renderDashboard;
+    el("reportBtn").onclick = openReportModal;
+    el("appealBtn").onclick = startAppealBot;
+    el("contactBtn").onclick = openContact;
+    el("ticketStatusBtn").onclick = renderTicketStatus;
+    el("lowBtn").onclick = renderLowPanel;
+    el("midBtn").onclick = renderMiddlePanel;
+    el("highBtn").onclick = renderHighPanel;
+    el("hqBtn").onclick = renderHqPanel;
+    el("jcBtn").onclick = renderJcPanel;
+    el("ownerBtn").onclick = renderOwnershipPanel;
+    el("profileChip").onclick = openAccountSwitcher;
+
+    window.addEventListener("load", async () => {
+      renderDashboard();
+      try {
+        await bootstrapSession();
+        await refreshMe();
+      } catch (e) {
+        if (!String(e.message || "").includes("restricted")) {
+          toast(e.message || "Startup failed.", 4500);
+        }
+      }
+
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = setInterval(async () => {
+        try {
+          await refreshMe();
+        } catch (_) {}
+      }, 2500);
+    });
+  </script>
+</body>
+</html>
