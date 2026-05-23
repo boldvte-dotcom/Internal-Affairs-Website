@@ -36,11 +36,11 @@ ROBLOX_GROUP_RANK_TO_IA_ROLE = {
     5: "Middle Rank",
     6: "High Rank",
     7: "Headquarters",
-    251: "Headquarters",
-    252: "Headquarters",
-    253: "Joint Chiefs",
-    254: "Ownership",
-    255: "Ownership",
+    8: "Headquarters",
+    9: "Headquarters",
+    10: "Joint Chiefs",
+    11: "Ownership",
+    251: "Ownership",
 }
 
 ROLE_LEVELS = {
@@ -49,8 +49,8 @@ ROLE_LEVELS = {
     "Middle Rank": 4,
     "High Rank": 6,
     "Headquarters": 7,
-    "Joint Chiefs": 253,
-    "Ownership": 254,
+    "Joint Chiefs": 10,
+    "Ownership": 251,
 }
 
 ROLE_PERMISSIONS = {
