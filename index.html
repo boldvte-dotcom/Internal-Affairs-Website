@@ -705,7 +705,9 @@ Audit channel transmitting</div>
   </div>
 
   <script>
-    const API = "https://internal-affairs-website.onrender.com/";
+      const API = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://127.0.0.1:8000"
+    : "https://onrender.com";
     let sessionKey = localStorage.getItem("ia_session_key") || "";
     let customId = localStorage.getItem("ia_custom_id") || "";
     let visitorKey = localStorage.getItem("ia_visitor_key") || "";
