@@ -19,9 +19,11 @@ INDEX_FILE = BASE_DIR / "index.html"
 DB_FILE = BASE_DIR / "internal_affairs_clean.db"
 
 ACTION_LOG_WEBHOOK = "https://discord.com/api/webhooks/1490475325874896956/SIqaZjwchopOJiVtJX7o4-AdUaxtmvCbODh-Pta_UpQLuRfN3hJzm1iHJPJR_lKs4okI"
+STAFF_ACTION_LOG_WEBHOOK = "https://discord.com/api/webhooks/1502790486706884608/Z9HqrQLSW17mV20DtseLXSzfosHZkziw-7coVBKpn0QK9wJE0aoN1DHVuHAM7HN459Cj"
 REPORT_LOG_WEBHOOK = "https://discord.com/api/webhooks/1487913699468513290/rBQf5vyiDN2rdZvo1WQBiS_aDBKkT1vcRqqazExBZB2QHqfV-gaIQQ_7z3MLcFAr7MLv"
-APPEAL_LOG_WEBHOOK = "https://discord.com/api/webhooks/1490475547925680248/efCrT5jds6-LsKFGQfWugvbS28YseOaG_HM1dhFTc3Uj9G5PGiV0b-WvAekPd4pihmLQ"
+APPEAL_LOG_WEBHOOK = "https://discord.com/api/webhooks/1494822440877035561/dYkRfikUYXYjRq_vr9FVLEYaDFjgCkUxMUncze2DA0Rt3srL-CPc7f59iIhfvUvVa-3X"
 PERMISSION_ABUSE_WEBHOOK = "https://discord.com/api/webhooks/1490475547925680248/efCrT5jds6-LsKFGQfWugvbS28YseOaG_HM1dhFTc3Uj9G5PGiV0b-WvAekPd4pihmLQ"
+INTERVIEW_LOG_WEBHOOK = "https://discord.com/api/webhooks/1502750825645080780/7dopNSSb1lTZLRYYtr3U8H7I8rqreK-T-QxIx_QpoBO_mAC_vr7raYVkLBvMLlJABZYM"
 
 ROBLOX_GROUP_ID = 36058174
 ROBLOX_GROUP_URL = "https://www.roblox.com/communities/36058174/Internal-Affairs-SFPD#!/about"
@@ -135,6 +137,9 @@ ROLE_PERMISSIONS = {
         "view_headquarters_panel",
         "check_information",
         "send_global_message",
+        "manage_interviews",
+        "application_blacklist_user",
+        "revoke_application_blacklist",
     ],
     "Joint Chiefs": [
         "report_access",
@@ -164,6 +169,9 @@ ROLE_PERMISSIONS = {
         "send_global_message",
         "view_joint_chiefs_panel",
         "manage_website_shutdown",
+        "manage_interviews",
+        "application_blacklist_user",
+        "revoke_application_blacklist",
     ],
     "Ownership": [
         "report_access",
@@ -195,6 +203,9 @@ ROLE_PERMISSIONS = {
         "manage_website_shutdown",
         "view_ownership_panel",
         "manage_join_limit",
+        "manage_interviews",
+        "application_blacklist_user",
+        "revoke_application_blacklist",
     ],
 }
 
@@ -269,12 +280,37 @@ def grantable_permissions_for(role_name: str) -> list[str]:
     for name, level in ROLE_LEVELS.items():
         if level < actor_level:
             grantable |= set(role_permissions(name))
-    blocked = {"manage_website_shutdown", "view_joint_chiefs_panel", "view_ownership_panel", "send_global_message", "manage_join_limit"}
+    blocked = {
+        "manage_website_shutdown",
+        "view_joint_chiefs_panel",
+        "view_ownership_panel",
+        "send_global_message",
+        "manage_join_limit",
+        "manage_interviews",
+        "application_blacklist_user",
+        "revoke_application_blacklist",
+    }
     return sorted(grantable - blocked)
 
 
 def is_active(until_ts: Optional[int]) -> bool:
     return until_ts is None or until_ts > now_ts()
+
+
+def minutes_to_label(minutes: int) -> str:
+    if minutes < 60:
+        return f"{minutes} minute" + ("" if minutes == 1 else "s")
+    if minutes % 1440 == 0:
+        days = minutes // 1440
+        return f"{days} day" + ("" if days == 1 else "s")
+    if minutes % 60 == 0:
+        hours = minutes // 60
+        return f"{hours} hour" + ("" if hours == 1 else "s")
+    hours = minutes // 60
+    mins = minutes % 60
+    hour_part = f"{hours} hour" + ("" if hours == 1 else "s")
+    minute_part = f"{mins} minute" + ("" if mins == 1 else "s")
+    return f"{hour_part} and {minute_part}"
 
 
 def post_webhook(url: str, title: str, fields: list[dict[str, str]], footer: str = "") -> None:
@@ -300,7 +336,23 @@ def post_webhook(url: str, title: str, fields: list[dict[str, str]], footer: str
 def log_action(actor: sqlite3.Row, action: str, against_custom_id: str = "N/A", against_username: str = "N/A") -> None:
     post_webhook(
         ACTION_LOG_WEBHOOK,
-        "Internal Affairs Action Logged",
+        "Website Action Logged",
+        [
+            {"name": "Roblox Username", "value": actor["roblox_username"] or actor["username"]},
+            {"name": "Custom ID", "value": actor["custom_id"]},
+            {"name": "Date", "value": human_time()},
+            {"name": "Action", "value": action},
+            {"name": "Against Custom ID", "value": against_custom_id},
+            {"name": "Against Username", "value": against_username},
+        ],
+        footer=actor["custom_id"],
+    )
+
+
+def log_staff_action(actor: sqlite3.Row, action: str, against_custom_id: str = "N/A", against_username: str = "N/A") -> None:
+    post_webhook(
+        STAFF_ACTION_LOG_WEBHOOK,
+        "Staff Command Logged",
         [
             {"name": "Roblox Username", "value": actor["roblox_username"] or actor["username"]},
             {"name": "Custom ID", "value": actor["custom_id"]},
@@ -337,21 +389,6 @@ def add_inbox_item(recipient_custom_id: str, title: str, message: str, kind: str
     conn.close()
 
 
-def find_target_session(target_ref: str) -> Optional[sqlite3.Row]:
-    conn = db()
-    row = conn.execute(
-        """
-        SELECT * FROM sessions
-        WHERE custom_id = ? OR username = ? OR roblox_username = ?
-        ORDER BY last_seen_at DESC
-        LIMIT 1
-        """,
-        (target_ref, target_ref, target_ref),
-    ).fetchone()
-    conn.close()
-    return row
-
-
 def public_avatar_url(user_id: Optional[int]) -> str:
     if not user_id:
         return ""
@@ -368,6 +405,92 @@ def public_avatar_url(user_id: Optional[int]) -> str:
     except Exception:
         pass
     return ""
+
+
+def reset_sessions_to_guest(
+    conn: sqlite3.Connection,
+    custom_id: str,
+    roblox_user_id: Optional[int] = None,
+    forced_logout: int = 0
+) -> None:
+    rows = conn.execute(
+        """
+        SELECT session_key, custom_id
+        FROM sessions
+        WHERE custom_id = ?
+           OR (? IS NOT NULL AND roblox_user_id = ?)
+        """,
+        (custom_id, roblox_user_id, roblox_user_id),
+    ).fetchall()
+
+    for item in rows:
+        guest_name = f"Guest-{item['custom_id'][-4:]}"
+        conn.execute(
+            """
+            UPDATE sessions
+            SET username = ?, roblox_username = NULL, roblox_user_id = NULL,
+                role_name = 'Guest', verified = 0, verification_code = NULL,
+                verification_target = NULL, base_permissions = ?, extra_permissions = '[]',
+                forced_logout = ?
+            WHERE session_key = ?
+            """,
+            (
+                guest_name,
+                json_dump(role_permissions("Guest")),
+                forced_logout,
+                item["session_key"],
+            ),
+        )
+
+
+def clear_stale_verification_claims(conn: sqlite3.Connection, roblox_user_id: int) -> None:
+    rows = conn.execute(
+        """
+        SELECT session_key, custom_id
+        FROM sessions
+        WHERE roblox_user_id = ? AND verified = 0
+        """,
+        (roblox_user_id,),
+    ).fetchall()
+
+    for item in rows:
+        guest_name = f"Guest-{item['custom_id'][-4:]}"
+        conn.execute(
+            """
+            UPDATE sessions
+            SET username = ?, roblox_username = NULL, roblox_user_id = NULL,
+                role_name = 'Guest', verification_code = NULL,
+                verification_target = NULL, base_permissions = ?, extra_permissions = '[]'
+            WHERE session_key = ?
+            """,
+            (
+                guest_name,
+                json_dump(role_permissions("Guest")),
+                item["session_key"],
+            ),
+        )
+
+
+def find_target_session(target_ref: str) -> Optional[sqlite3.Row]:
+    target_ref = (target_ref or "").strip()
+    if not target_ref:
+        return None
+
+    conn = db()
+    row = conn.execute(
+        """
+        SELECT *
+        FROM sessions
+        WHERE custom_id = ?
+           OR username = ?
+           OR roblox_username = ?
+        ORDER BY last_seen_at DESC
+        LIMIT 1
+        """,
+        (target_ref, target_ref, target_ref),
+    ).fetchone()
+    conn.close()
+    return row
 
 
 def inbox_for(custom_id: str) -> dict[str, Any]:
@@ -420,17 +543,23 @@ def active_messages_for(custom_id: str) -> list[dict[str, Any]]:
 def parse_duration(raw: str) -> tuple[Optional[int], str]:
     raw = raw.strip().upper()
     if raw == "PERMANENTLY":
-        return None, "PERMANENTLY"
-    match = re.fullmatch(r"(\d+)([DWM])", raw)
+        return None, "Permanent"
+    match = re.fullmatch(r"(\d+)(MO|[SMHDW])", raw)
     if not match:
-        raise HTTPException(status_code=400, detail="Use 7D, 2W, 1M or PERMANENTLY.")
+        raise HTTPException(status_code=400, detail="Use S, M, H, D, W, MO, or PERMANENTLY. Example: 30S, 15M, 2H, 7D, 2W, 1MO.")
     amount = int(match.group(1))
     unit = match.group(2)
+    if unit == "S":
+        return now_ts() + amount, f"{amount} second" + ("" if amount == 1 else "s")
+    if unit == "M":
+        return now_ts() + amount * 60, f"{amount} minute" + ("" if amount == 1 else "s")
+    if unit == "H":
+        return now_ts() + amount * 3600, f"{amount} hour" + ("" if amount == 1 else "s")
     if unit == "D":
-        return now_ts() + amount * 86400, f"{amount}D"
+        return now_ts() + amount * 86400, f"{amount} day" + ("" if amount == 1 else "s")
     if unit == "W":
-        return now_ts() + amount * 7 * 86400, f"{amount}W"
-    return now_ts() + amount * 30 * 86400, f"{amount}M"
+        return now_ts() + amount * 7 * 86400, f"{amount} week" + ("" if amount == 1 else "s")
+    return now_ts() + amount * 30 * 86400, f"{amount} month" + ("" if amount == 1 else "s")
 
 
 def parse_shutdown_duration(raw: str) -> tuple[int, str]:
@@ -520,17 +649,46 @@ def roblox_lookup_username(username: str) -> tuple[int, str]:
 
 def roblox_lookup_profile_link(link: str) -> tuple[int, str]:
     link = link.strip()
+    if not link:
+        raise HTTPException(status_code=400, detail="Please paste your Roblox profile link.")
+
+    if re.fullmatch(r"\d+", link):
+        user_id = int(link)
+        res = requests.get(f"https://users.roblox.com/v1/users/{user_id}", timeout=10)
+        if res.status_code == 404:
+            raise HTTPException(status_code=400, detail="Roblox account not found.")
+        res.raise_for_status()
+        data = res.json()
+        return user_id, data["name"]
+
+    if "roblox.com" not in link.lower() and "/" not in link:
+        return roblox_lookup_username(link)
+
     username_match = re.search(r"/users/profile\?username=([^/?&#]+)", link, re.I)
     if username_match:
         return roblox_lookup_username(username_match.group(1))
+    alt_username_match = re.search(r"[?&]username=([^/?&#]+)", link, re.I)
+    if alt_username_match:
+        return roblox_lookup_username(alt_username_match.group(1))
     direct_match = re.search(r"/users/(\d+)/profile", link, re.I)
     if direct_match:
         user_id = int(direct_match.group(1))
         res = requests.get(f"https://users.roblox.com/v1/users/{user_id}", timeout=10)
+        if res.status_code == 404:
+            raise HTTPException(status_code=400, detail="Roblox account not found.")
         res.raise_for_status()
         data = res.json()
         return user_id, data["name"]
-    raise HTTPException(status_code=400, detail="Invalid Roblox profile link.")
+    users_segment_match = re.search(r"/users/(\d+)", link, re.I)
+    if users_segment_match:
+        user_id = int(users_segment_match.group(1))
+        res = requests.get(f"https://users.roblox.com/v1/users/{user_id}", timeout=10)
+        if res.status_code == 404:
+            raise HTTPException(status_code=400, detail="Roblox account not found.")
+        res.raise_for_status()
+        data = res.json()
+        return user_id, data["name"]
+    raise HTTPException(status_code=400, detail="Invalid Roblox profile link. Use a Roblox profile URL, username, or user ID.")
 
 
 def roblox_get_profile_description(user_id: int) -> str:
@@ -675,6 +833,25 @@ def shutdown_block_for(row: sqlite3.Row) -> Optional[dict[str, Any]]:
     return {"active": True, "time_label": shutdown["time_label"]}
 
 
+def interviews_open() -> bool:
+    conn = db()
+    row = conn.execute("SELECT is_open FROM interview_settings WHERE id = 1").fetchone()
+    conn.close()
+    return bool(row["is_open"]) if row else False
+
+
+def application_blacklist_for(custom_id: str) -> Optional[sqlite3.Row]:
+    conn = db()
+    row = conn.execute(
+        "SELECT * FROM application_blacklists WHERE target_custom_id = ? ORDER BY created_at DESC LIMIT 1",
+        (custom_id,),
+    ).fetchone()
+    conn.close()
+    if row and is_active(row["until_ts"]):
+        return row
+    return None
+
+
 def check_join_limit_for_new_visitor(visitor_key: str) -> dict[str, Any]:
     conn = db()
     seen = conn.execute("SELECT 1 FROM known_visitors WHERE visitor_key = ?", (visitor_key,)).fetchone()
@@ -713,6 +890,13 @@ def check_join_limit_for_new_visitor(visitor_key: str) -> dict[str, Any]:
     return {"allowed": True}
 
 
+def ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, ddl: str) -> None:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    existing = {row[1] for row in rows}
+    if column_name not in existing:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {ddl}")
+
+
 def setup_db() -> None:
     conn = db()
     cur = conn.cursor()
@@ -738,6 +922,21 @@ def setup_db() -> None:
             last_seen_at INTEGER NOT NULL
         )
     """)
+    ensure_column(conn, "sessions", "visitor_key", "visitor_key TEXT")
+    ensure_column(conn, "sessions", "roblox_username", "roblox_username TEXT")
+    ensure_column(conn, "sessions", "roblox_user_id", "roblox_user_id INTEGER")
+    ensure_column(conn, "sessions", "role_name", "role_name TEXT NOT NULL DEFAULT 'Guest'")
+    ensure_column(conn, "sessions", "verified", "verified INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "verification_code", "verification_code TEXT")
+    ensure_column(conn, "sessions", "verification_target", "verification_target TEXT")
+    ensure_column(conn, "sessions", "base_permissions", "base_permissions TEXT NOT NULL DEFAULT '[]'")
+    ensure_column(conn, "sessions", "extra_permissions", "extra_permissions TEXT NOT NULL DEFAULT '[]'")
+    ensure_column(conn, "sessions", "forced_logout", "forced_logout INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "suspended", "suspended INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "suspended_reason", "suspended_reason TEXT")
+    ensure_column(conn, "sessions", "created_at", "created_at INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "last_seen_at", "last_seen_at INTEGER NOT NULL DEFAULT 0")
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS known_visitors (
             visitor_key TEXT PRIMARY KEY,
@@ -784,6 +983,20 @@ def setup_db() -> None:
             reason TEXT NOT NULL,
             time_label TEXT NOT NULL,
             until_ts INTEGER
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS application_blacklists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_custom_id TEXT NOT NULL,
+            target_username TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            time_label TEXT NOT NULL,
+            until_ts INTEGER NOT NULL,
+            notify_user INTEGER NOT NULL DEFAULT 0,
+            created_by_custom_id TEXT NOT NULL,
+            created_by_username TEXT NOT NULL,
+            created_at INTEGER NOT NULL
         )
     """)
     cur.execute("""
@@ -854,6 +1067,27 @@ def setup_db() -> None:
         )
     """)
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS interview_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            is_open INTEGER NOT NULL DEFAULT 0,
+            updated_by_custom_id TEXT NOT NULL DEFAULT 'SYSTEM',
+            updated_by_username TEXT NOT NULL DEFAULT 'System',
+            updated_at INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS interview_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            applicant_custom_id TEXT NOT NULL,
+            applicant_username TEXT NOT NULL,
+            roblox_user_id INTEGER,
+            answers_json TEXT NOT NULL,
+            overall_score INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            created_at INTEGER NOT NULL
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS website_shutdown (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             active INTEGER NOT NULL DEFAULT 1,
@@ -909,6 +1143,11 @@ def setup_db() -> None:
             updated_at INTEGER NOT NULL
         )
     """)
+    cur.execute("""
+        INSERT OR IGNORE INTO interview_settings (
+            id, is_open, updated_by_custom_id, updated_by_username, updated_at
+        ) VALUES (1, 0, 'SYSTEM', 'System', 0)
+    """)
     conn.commit()
     conn.close()
 
@@ -948,10 +1187,22 @@ def bootstrap(payload: dict[str, Any] | None = None):
     if not join_check["allowed"]:
         raise HTTPException(status_code=429, detail=json.dumps(join_check))
 
-    session_key = make_session_key()
-    custom_id = make_custom_id()
-    username = f"Guest-{custom_id[-4:]}"
     conn = db()
+    existing = conn.execute(
+        """
+        SELECT * FROM sessions
+        WHERE visitor_key = ?
+        ORDER BY last_seen_at DESC
+        LIMIT 1
+        """,
+        (visitor_key,),
+    ).fetchone()
+
+    session_key = make_session_key()
+    custom_id = existing["custom_id"] if existing else make_custom_id()
+    username = (existing["username"] if existing else f"Guest-{custom_id[-4:]}")
+    created_at = existing["created_at"] if existing else now_ts()
+
     conn.execute(
         """
         INSERT INTO sessions (
@@ -959,7 +1210,7 @@ def bootstrap(payload: dict[str, Any] | None = None):
             extra_permissions, created_at, last_seen_at
         ) VALUES (?, ?, ?, ?, 'Guest', ?, '[]', ?, ?)
         """,
-        (session_key, custom_id, visitor_key, username, json_dump(role_permissions("Guest")), now_ts(), now_ts()),
+        (session_key, custom_id, visitor_key, username, json_dump(role_permissions("Guest")), created_at, now_ts()),
     )
     conn.commit()
     conn.close()
@@ -974,6 +1225,10 @@ def me(session_key: str):
         "SELECT * FROM report_blacklists WHERE custom_id = ? OR username = ?",
         (row["custom_id"], row["roblox_username"] or row["username"]),
     ).fetchone()
+    app_blacklist = conn.execute(
+        "SELECT * FROM application_blacklists WHERE target_custom_id = ? ORDER BY created_at DESC LIMIT 1",
+        (row["custom_id"],),
+    ).fetchone()
     termination = conn.execute(
         "SELECT * FROM terminations WHERE custom_id = ? OR username = ?",
         (row["custom_id"], row["roblox_username"] or row["username"]),
@@ -981,6 +1236,7 @@ def me(session_key: str):
     join_limit = conn.execute("SELECT * FROM join_limits WHERE active = 1 ORDER BY id DESC LIMIT 1").fetchone()
     conn.close()
     inbox = inbox_for(row["custom_id"])
+    app_blacklisted = bool(app_blacklist and is_active(app_blacklist["until_ts"]))
     return {
         "custom_id": row["custom_id"],
         "username": row["username"],
@@ -999,11 +1255,15 @@ def me(session_key: str):
         "events": pending_events_for(row["custom_id"]),
         "inbox_unread_count": inbox["unread_count"],
         "report_blacklisted": bool(blacklist and is_active(blacklist["until_ts"])),
+        "application_blacklisted": app_blacklisted,
+        "application_blacklist_reason": app_blacklist["reason"] if app_blacklisted else None,
+        "application_blacklist_time_label": app_blacklist["time_label"] if app_blacklisted else None,
         "terminated": bool(termination and is_active(termination["until_ts"])),
         "terminated_reason": termination["reason"] if termination and is_active(termination["until_ts"]) else None,
         "terminated_time_label": termination["time_label"] if termination and is_active(termination["until_ts"]) else None,
         "shutdown": shutdown_block_for(row),
         "join_limit": dict(join_limit) if join_limit else None,
+        "interviews_open": interviews_open(),
     }
 
 
@@ -1020,8 +1280,13 @@ def logged_accounts(session_key: str):
         """
     ).fetchall()
     conn.close()
+    seen = set()
     items = []
     for row in rows:
+        key = row["roblox_username"] or row["custom_id"]
+        if key in seen:
+            continue
+        seen.add(key)
         item = dict(row)
         item["avatar_url"] = public_avatar_url(row["roblox_user_id"])
         items.append(item)
@@ -1031,21 +1296,11 @@ def logged_accounts(session_key: str):
 @app.post("/api/logout")
 def logout(payload: dict[str, Any]):
     row = session_row(payload["session_key"])
-    guest_name = f"Guest-{row['custom_id'][-4:]}"
     conn = db()
-    conn.execute(
-        """
-        UPDATE sessions
-        SET username = ?, roblox_username = NULL, roblox_user_id = NULL,
-            role_name = 'Guest', verified = 0, verification_code = NULL,
-            verification_target = NULL, base_permissions = ?, extra_permissions = '[]',
-            forced_logout = 0
-        WHERE session_key = ?
-        """,
-        (guest_name, json_dump(role_permissions("Guest")), row["session_key"]),
-    )
+    reset_sessions_to_guest(conn, row["custom_id"], row["roblox_user_id"], forced_logout=0)
     conn.commit()
     conn.close()
+    log_action(row, "Logged Out")
     return {"success": True}
 
 
@@ -1054,11 +1309,25 @@ def verification_start(payload: dict[str, Any]):
     row = session_row(payload["session_key"])
     profile_link = payload.get("profile_link", "").strip()
     user_id, username = roblox_lookup_profile_link(profile_link)
-    code = make_verification_code()
 
     conn = db()
+    clear_stale_verification_claims(conn, user_id)
+    existing = conn.execute(
+        """
+        SELECT * FROM sessions
+        WHERE verified = 1 AND roblox_user_id = ? AND custom_id != ?
+        LIMIT 1
+        """,
+        (user_id, row["custom_id"]),
+    ).fetchone()
+    if existing:
+        conn.close()
+        raise HTTPException(status_code=400, detail="This account has already been verified.")
+
+    code = make_verification_code()
     while conn.execute("SELECT 1 FROM sessions WHERE verification_code = ?", (code,)).fetchone():
         code = make_verification_code()
+
     conn.execute(
         """
         UPDATE sessions
@@ -1178,7 +1447,41 @@ def logged_users(session_key: str):
         """
     ).fetchall()
     conn.close()
-    return {"users": [dict(x) for x in rows]}
+    seen = set()
+    users = []
+    for row in rows:
+        key = row["roblox_username"] or row["custom_id"]
+        if key in seen:
+            continue
+        seen.add(key)
+        users.append(dict(row))
+    return {"users": users}
+
+
+@app.get("/api/users-database")
+def users_database(session_key: str):
+    actor = require_permission(session_key, "check_information")
+    conn = db()
+    rows = conn.execute(
+        """
+        SELECT custom_id, username, roblox_username, visitor_key, role_name, created_at, last_seen_at
+        FROM sessions
+        ORDER BY last_seen_at DESC
+        """
+    ).fetchall()
+    conn.close()
+
+    seen = set()
+    items = []
+    for row in rows:
+        key = row["roblox_username"] or row["visitor_key"] or row["custom_id"]
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(dict(row))
+
+    log_staff_action(actor, "Viewed Website Users Database")
+    return {"items": items}
 
 
 @app.post("/api/force-logout")
@@ -1192,21 +1495,13 @@ def force_logout(payload: dict[str, Any]):
     require_not_higher_rank(actor, target, "Force Logout")
 
     conn = db()
-    conn.execute(
-        """
-        UPDATE sessions
-        SET forced_logout = 1, verified = 0, role_name = 'Guest',
-            base_permissions = ?, extra_permissions = '[]', verification_code = NULL
-        WHERE custom_id = ?
-        """,
-        (json_dump(role_permissions("Guest")), target["custom_id"]),
-    )
+    reset_sessions_to_guest(conn, target["custom_id"], target["roblox_user_id"], forced_logout=1)
     conn.commit()
     conn.close()
 
     add_event(target["custom_id"], "force_logout", {"message": "You have been logged out of your account and thus need to verify again!"})
     add_inbox_item(target["custom_id"], "Internal Affairs System", "You have been logged out of your account and thus need to verify again!")
-    log_action(actor, "Force Logout", target["custom_id"], target["roblox_username"] or target["username"])
+    log_staff_action(actor, "Force Logout", target["custom_id"], target["roblox_username"] or target["username"])
     return {"success": True}
 
 
@@ -1226,15 +1521,7 @@ def bulk_force_logout(payload: dict[str, Any]):
             continue
         if role_level(target["role_name"]) > role_level(actor["role_name"]):
             continue
-        conn.execute(
-            """
-            UPDATE sessions
-            SET forced_logout = 1, verified = 0, role_name = 'Guest',
-                base_permissions = ?, extra_permissions = '[]', verification_code = NULL
-            WHERE custom_id = ?
-            """,
-            (json_dump(role_permissions("Guest")), target["custom_id"]),
-        )
+        reset_sessions_to_guest(conn, target["custom_id"], target["roblox_user_id"], forced_logout=1)
         done.append(target)
     conn.commit()
     conn.close()
@@ -1242,7 +1529,7 @@ def bulk_force_logout(payload: dict[str, Any]):
     for target in done:
         add_event(target["custom_id"], "force_logout", {"message": f"You have been logged out of your account. Reason: {reason}"})
         add_inbox_item(target["custom_id"], "Internal Affairs System", f"You have been logged out of your account. Reason: {reason}")
-    log_action(actor, f"Bulk Force Logout ({len(done)})")
+    log_staff_action(actor, f"Bulk Force Logout ({len(done)})")
     return {"success": True, "count": len(done)}
 
 
@@ -1318,7 +1605,7 @@ def report_blacklist(payload: dict[str, Any]):
     conn.close()
 
     add_inbox_item(target["custom_id"], "Internal Affairs System", f"You have been report blacklisted for {reason} for {label}.")
-    log_action(actor, "Report Blacklist", target["custom_id"], target_username)
+    log_staff_action(actor, "Report Blacklist", target["custom_id"], target_username)
     return {"success": True}
 
 
@@ -1347,7 +1634,116 @@ def revoke_report_blacklist(payload: dict[str, Any]):
     if row["custom_id"]:
         add_event(row["custom_id"], "report_blacklist_revoked", {"message": "Your report blacklist has been revoked."})
         add_inbox_item(row["custom_id"], "Internal Affairs System", "Your report blacklist has been revoked.")
-    log_action(actor, "Revoke Report Blacklist", row["custom_id"] or "N/A", target_username)
+    log_staff_action(actor, "Revoke Report Blacklist", row["custom_id"] or "N/A", target_username)
+    return {"success": True}
+
+
+@app.post("/api/application-blacklist")
+def application_blacklist(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "application_blacklist_user")
+    target_ref = payload.get("target_ref", "").strip()
+    minutes = int(payload.get("minutes", 0))
+    reason = payload.get("reason", "").strip()
+    notify_user = bool(payload.get("notify_user"))
+
+    if minutes <= 0:
+        raise HTTPException(status_code=400, detail="Time must be above 0 minutes.")
+    if not reason:
+        raise HTTPException(status_code=400, detail="Reason is required.")
+
+    target = find_target_session(target_ref)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    target_username = target["roblox_username"] or target["username"]
+    until_ts = now_ts() + minutes * 60
+    time_label = minutes_to_label(minutes)
+
+    conn = db()
+    conn.execute(
+        """
+        INSERT INTO application_blacklists (
+            target_custom_id, target_username, reason, time_label, until_ts,
+            notify_user, created_by_custom_id, created_by_username, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            target["custom_id"],
+            target_username,
+            reason,
+            time_label,
+            until_ts,
+            1 if notify_user else 0,
+            actor["custom_id"],
+            actor["roblox_username"] or actor["username"],
+            now_ts(),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    if notify_user:
+        add_inbox_item(
+            target["custom_id"],
+            "Internal Affairs System",
+            f"You have been blacklisted from applications for {time_label}. Reason: {reason}"
+        )
+        add_event(target["custom_id"], "application_blacklisted", {"message": f"You have been blacklisted from applications for {time_label}."})
+
+    log_staff_action(actor, "Application Blacklist", target["custom_id"], target_username)
+    return {"success": True}
+
+
+@app.get("/api/application-blacklists")
+def list_application_blacklists(session_key: str):
+    require_permission(session_key, "revoke_application_blacklist")
+    conn = db()
+    rows = conn.execute(
+        """
+        SELECT target_custom_id, target_username, reason, time_label, until_ts
+        FROM application_blacklists
+        ORDER BY created_at DESC
+        """
+    ).fetchall()
+    conn.close()
+
+    seen = set()
+    items = []
+    for row in rows:
+        if row["target_custom_id"] in seen:
+            continue
+        if row["until_ts"] <= now_ts():
+            continue
+        seen.add(row["target_custom_id"])
+        items.append(dict(row))
+    return {"items": items}
+
+
+@app.post("/api/revoke-application-blacklist")
+def revoke_application_blacklist(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "revoke_application_blacklist")
+    target_custom_id = payload.get("target_custom_id", "").strip()
+    conn = db()
+    row = conn.execute(
+        """
+        SELECT * FROM application_blacklists
+        WHERE target_custom_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (target_custom_id,),
+    ).fetchone()
+    if not row or row["until_ts"] <= now_ts():
+        conn.close()
+        raise HTTPException(status_code=404, detail="No active application blacklist found.")
+
+    conn.execute("UPDATE application_blacklists SET until_ts = ? WHERE target_custom_id = ?", (now_ts() - 1, target_custom_id))
+    conn.commit()
+    conn.close()
+
+    add_inbox_item(target_custom_id, "Internal Affairs System", "Your application blacklist has been revoked.")
+    add_event(target_custom_id, "application_blacklist_revoked", {"message": "Your application blacklist has been revoked."})
+    log_staff_action(actor, "Revoke Application Blacklist", target_custom_id, row["target_username"])
     return {"success": True}
 
 
@@ -1373,9 +1769,14 @@ def terminate(payload: dict[str, Any]):
     conn.commit()
     conn.close()
 
-    add_inbox_item(target["custom_id"], "Internal Affairs System", f"You have been terminated for {reason} for {label}.")
+    if until_ts is None:
+        termination_message = f"You have been permanently terminated from the website. Reason: {reason}"
+    else:
+        termination_message = f"You have been terminated for {label}. Reason: {reason}"
+
+    add_inbox_item(target["custom_id"], "Internal Affairs System", termination_message)
     add_event(target["custom_id"], "terminated", {"reason": reason, "time_label": label})
-    log_action(actor, "Terminate User", target["custom_id"], target_username)
+    log_staff_action(actor, "Terminate User", target["custom_id"], target_username)
     return {"success": True}
 
 
@@ -1404,7 +1805,7 @@ def revoke_terminate(payload: dict[str, Any]):
     if row["custom_id"]:
         add_event(row["custom_id"], "termination_revoked", {"message": "Your termination has been revoked."})
         add_inbox_item(row["custom_id"], "Internal Affairs System", "Your termination has been revoked.")
-    log_action(actor, "Revoke Terminate", row["custom_id"] or "N/A", target_username)
+    log_staff_action(actor, "Revoke Terminate", row["custom_id"] or "N/A", target_username)
     return {"success": True}
 
 
@@ -1428,7 +1829,7 @@ def give_permissions(payload: dict[str, Any]):
     conn.close()
 
     add_inbox_item(target_custom_id, "Internal Affairs System", f"Permissions granted: {', '.join(sorted(permissions))}")
-    log_action(actor, "Give Permissions", target_custom_id, target["roblox_username"] or target["username"])
+    log_staff_action(actor, "Give Permissions", target_custom_id, target["roblox_username"] or target["username"])
     return {"success": True}
 
 
@@ -1455,7 +1856,7 @@ def remove_permissions(payload: dict[str, Any]):
     conn.close()
 
     add_inbox_item(target_custom_id, "Internal Affairs System", f"Permissions removed: {', '.join(sorted(permissions))}")
-    log_action(actor, "Remove Permissions", target_custom_id, target["roblox_username"] or target["username"])
+    log_staff_action(actor, "Remove Permissions", target_custom_id, target["roblox_username"] or target["username"])
     return {"success": True}
 
 
@@ -1473,7 +1874,7 @@ def send_inbox_message(payload: dict[str, Any]):
 
     add_inbox_item(target["custom_id"], "Internal Affairs System", message)
     add_event(target["custom_id"], "inbox_message_received", {"message": "An Internal Affairs message has been sent to your inbox."})
-    log_action(actor, "Send Message In Inbox", target["custom_id"], target["roblox_username"] or target["username"])
+    log_staff_action(actor, "Send Message In Inbox", target["custom_id"], target["roblox_username"] or target["username"])
     return {"success": True}
 
 
@@ -1504,13 +1905,13 @@ def send_global_message(payload: dict[str, Any]):
     for user in users:
         add_event(user["custom_id"], "global_message_received", {"message": message, "duration_seconds": duration})
 
-    log_action(actor, "Send Global Message", "GLOBAL", "All Users")
+    log_staff_action(actor, "Send Global Message", "GLOBAL", "All Users")
     return {"success": True}
 
 
 @app.post("/api/check-information")
 def check_information(payload: dict[str, Any]):
-    require_permission(payload["session_key"], "check_information")
+    actor = require_permission(payload["session_key"], "check_information")
     target_custom_id = payload.get("target_custom_id", "").strip()
     conn = db()
     target = conn.execute("SELECT * FROM sessions WHERE custom_id = ?", (target_custom_id,)).fetchone()
@@ -1520,10 +1921,14 @@ def check_information(payload: dict[str, Any]):
     blacklist = conn.execute("SELECT * FROM report_blacklists WHERE custom_id = ?", (target_custom_id,)).fetchone()
     termination = conn.execute("SELECT * FROM terminations WHERE custom_id = ?", (target_custom_id,)).fetchone()
     conn.close()
+
+    log_staff_action(actor, "Check Information", target["custom_id"], target["roblox_username"] or target["username"])
     return {
         "username": target["roblox_username"] or target["username"],
         "custom_id": target["custom_id"],
         "role_name": target["role_name"],
+        "joined_at": target["created_at"],
+        "last_seen_at": target["last_seen_at"],
         "report_blacklisted": bool(blacklist and is_active(blacklist["until_ts"])),
         "terminated": bool(termination and is_active(termination["until_ts"])),
         "termination_reason": termination["reason"] if termination and is_active(termination["until_ts"]) else None,
@@ -1533,6 +1938,26 @@ def check_information(payload: dict[str, Any]):
 @app.post("/api/appeal")
 def appeal(payload: dict[str, Any]):
     row = session_row(payload["session_key"])
+    conn = db()
+    last_appeal = conn.execute(
+        """
+        SELECT created_at
+        FROM appeals
+        WHERE appellant_custom_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (row["custom_id"],),
+    ).fetchone()
+    conn.close()
+
+    if last_appeal:
+        next_appeal_at = int(last_appeal["created_at"]) + (14 * 24 * 60 * 60)
+        if now_ts() < next_appeal_at:
+            raise HTTPException(
+                status_code=403,
+                detail="You are only allowed to send one appeal every 2 weeks."
+            )
     q1 = payload.get("punishment_details", "").strip()
     q2 = payload.get("learned_answer", "").strip()
     q3 = payload.get("future_answer", "").strip()
@@ -1583,6 +2008,126 @@ def appeals(session_key: str):
     return {"items": [dict(x) for x in rows]}
 
 
+@app.get("/api/interviews/status")
+def interviews_status(session_key: str):
+    session_row(session_key)
+    return {"is_open": interviews_open()}
+
+
+@app.post("/api/interviews/toggle")
+def interviews_toggle(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "manage_interviews")
+    open_state = 1 if bool(payload.get("open")) else 0
+
+    conn = db()
+    conn.execute(
+        """
+        UPDATE interview_settings
+        SET is_open = ?, updated_by_custom_id = ?, updated_by_username = ?, updated_at = ?
+        WHERE id = 1
+        """,
+        (open_state, actor["custom_id"], actor["roblox_username"] or actor["username"], now_ts()),
+    )
+    conn.commit()
+    conn.close()
+
+    log_staff_action(actor, "Open Interviews" if open_state else "Close Interviews")
+    return {"success": True, "is_open": bool(open_state)}
+
+
+@app.post("/api/interview/apply")
+def interview_apply(payload: dict[str, Any]):
+    row = session_row(payload["session_key"])
+    conn = db()
+    last_application = conn.execute(
+        """
+        SELECT created_at
+        FROM interview_applications
+        WHERE applicant_custom_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (row["custom_id"],),
+    ).fetchone()
+    conn.close()
+
+    if last_application:
+        next_application_at = int(last_application["created_at"]) + (14 * 24 * 60 * 60)
+        if now_ts() < next_application_at:
+            raise HTTPException(
+                status_code=403,
+                detail="You are only allowed to send one application every 2 weeks."
+            )
+
+    if not row["verified"]:
+        raise HTTPException(status_code=403, detail="You must verify before applying.")
+    if not interviews_open():
+        raise HTTPException(status_code=403, detail="Applications are currently closed.")
+
+    app_blacklist = application_blacklist_for(row["custom_id"])
+    if app_blacklist:
+        raise HTTPException(
+            status_code=403,
+            detail=f"You are application blacklisted. Reason: {app_blacklist['reason']} | Duration: {app_blacklist['time_label']}"
+        )
+
+    answers = payload.get("answers", [])
+    if not isinstance(answers, list) or not answers:
+        raise HTTPException(status_code=400, detail="No interview answers were provided.")
+
+    cleaned_answers = []
+    for item in answers:
+        question = str(item.get("question", "")).strip()
+        answer = str(item.get("answer", "")).strip()
+        if not question or not answer:
+            raise HTTPException(status_code=400, detail="Every interview question must have an answer.")
+        cleaned_answers.append({"question": question, "answer": answer})
+
+    overall_score = 0
+    for item in cleaned_answers:
+        overall_score += score_answer(
+            item["answer"],
+            ["professional", "discipline", "team", "fair", "learn", "administration", "intelligence", "stress"]
+        )
+    overall_score = round(overall_score / len(cleaned_answers))
+
+    applicant_username = row["roblox_username"] or row["username"]
+
+    conn = db()
+    conn.execute(
+        """
+        INSERT INTO interview_applications (
+            applicant_custom_id, applicant_username, roblox_user_id,
+            answers_json, overall_score, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            row["custom_id"],
+            applicant_username,
+            row["roblox_user_id"],
+            json_dump(cleaned_answers),
+            overall_score,
+            now_ts(),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    webhook_fields = [
+        {"name": "Applicant", "value": applicant_username},
+        {"name": "Custom ID", "value": row["custom_id"]},
+    ]
+    for item in cleaned_answers[:20]:
+        webhook_fields.append({"name": item["question"][:256], "value": item["answer"][:1024]})
+
+    post_webhook(
+        INTERVIEW_LOG_WEBHOOK,
+        "Interview Submission",
+        webhook_fields,
+        footer=row["custom_id"],
+    )
+    log_action(row, "Submitted Interview Application")
+    return {"success": True}
 @app.post("/api/website-shutdown")
 def website_shutdown(payload: dict[str, Any]):
     actor = require_permission(payload["session_key"], "manage_website_shutdown")
@@ -1599,7 +2144,7 @@ def website_shutdown(payload: dict[str, Any]):
     )
     conn.commit()
     conn.close()
-    log_action(actor, "Temporary Website Shutdown")
+    log_staff_action(actor, "Temporary Website Shutdown")
     return {"success": True, "time_label": label}
 
 
@@ -1610,7 +2155,7 @@ def website_shutdown_clear(payload: dict[str, Any]):
     conn.execute("UPDATE website_shutdown SET active = 0 WHERE active = 1")
     conn.commit()
     conn.close()
-    log_action(actor, "Remove Website Shutdown")
+    log_staff_action(actor, "Remove Website Shutdown")
     return {"success": True}
 
 
@@ -1635,7 +2180,7 @@ def set_join_limit(payload: dict[str, Any]):
     )
     conn.commit()
     conn.close()
-    log_action(actor, f"Reduce Amount of New Joins ({join_amount} per {period_name})")
+    log_staff_action(actor, f"Reduce Amount of New Joins ({join_amount} per {period_name})")
     return {"success": True}
 
 
@@ -1646,7 +2191,7 @@ def revoke_join_limit(payload: dict[str, Any]):
     conn.execute("UPDATE join_limits SET active = 0 WHERE active = 1")
     conn.commit()
     conn.close()
-    log_action(actor, "Revoke Join Limit")
+    log_staff_action(actor, "Revoke Join Limit")
     return {"success": True}
 
 
@@ -1722,7 +2267,7 @@ def tickets_claim(payload: dict[str, Any]):
     )
     conn.commit()
     conn.close()
-    log_action(actor, "Claim Ticket", ticket["opener_custom_id"], ticket["opener_username"])
+    log_staff_action(actor, "Claim Ticket", ticket["opener_custom_id"], ticket["opener_username"])
     return {"success": True}
 
 
@@ -1754,6 +2299,11 @@ def tickets_reply(payload: dict[str, Any]):
     if recipient:
         add_event(recipient, "ticket_reply", {"message": "A ticket reply has been sent."})
         add_inbox_item(recipient, "Internal Affairs System", "A new reply has been added to your ticket.")
+
+    if "view_tickets" in merged_permissions(row):
+        log_staff_action(row, "Ticket Reply", ticket["opener_custom_id"], ticket["opener_username"])
+    else:
+        log_action(row, "Ticket Reply", ticket["claimed_by_custom_id"] or "N/A", ticket["claimed_by_username"] or "N/A")
     return {"success": True}
 
 
@@ -1779,7 +2329,7 @@ def tickets_close(payload: dict[str, Any]):
 
     add_event(ticket["opener_custom_id"], "ticket_closed", {"message": "Your ticket has been closed."})
     add_inbox_item(ticket["opener_custom_id"], "Internal Affairs System", "Your ticket has been closed.")
-    log_action(actor, "Close Ticket", ticket["opener_custom_id"], ticket["opener_username"])
+    log_staff_action(actor, "Close Ticket", ticket["opener_custom_id"], ticket["opener_username"])
     return {"success": True}
 
 
@@ -1816,7 +2366,7 @@ def permission_abuse_unsuspend(payload: dict[str, Any]):
     conn.close()
 
     add_event(abuser_custom_id, "permission_abuse_unsuspended", {"message": "A High Rank has removed your temporary suspension."})
-    log_action(actor, "Unsuspend Permission Abuse", abuser_custom_id, target["roblox_username"] or target["username"])
+    log_staff_action(actor, "Unsuspend Permission Abuse", abuser_custom_id, target["roblox_username"] or target["username"])
     return {"success": True}
 
 
