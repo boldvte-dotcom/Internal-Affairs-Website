@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 import sqlite3
@@ -140,6 +141,7 @@ ROLE_PERMISSIONS = {
         "manage_interviews",
         "application_blacklist_user",
         "revoke_application_blacklist",
+        "manage_staff_access",
     ],
     "Joint Chiefs": [
         "report_access",
@@ -172,6 +174,7 @@ ROLE_PERMISSIONS = {
         "manage_interviews",
         "application_blacklist_user",
         "revoke_application_blacklist",
+        "manage_staff_access",
     ],
     "Ownership": [
         "report_access",
@@ -206,6 +209,7 @@ ROLE_PERMISSIONS = {
         "manage_interviews",
         "application_blacklist_user",
         "revoke_application_blacklist",
+        "manage_staff_access",
     ],
 }
 
@@ -262,6 +266,14 @@ def make_visitor_key() -> str:
     return "VIS-" + "".join(random.choices(string.ascii_letters + string.digits, k=24))
 
 
+def make_staff_agent_code() -> str:
+    return "CAC-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=4)) + "-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+
+
+def make_staff_agent_alias() -> str:
+    return "Agent IA-" + "".join(random.choices(string.digits, k=8))
+
+
 def role_level(role_name: str) -> int:
     return ROLE_LEVELS.get(role_name, 0)
 
@@ -271,7 +283,11 @@ def role_permissions(role_name: str) -> list[str]:
 
 
 def merged_permissions(row: sqlite3.Row) -> set[str]:
-    return set(json_load(row["base_permissions"])) | set(json_load(row["extra_permissions"]))
+    if not row["verified"]:
+        return set(role_permissions("Guest"))
+    if row["staff_mode"]:
+        return set(json_load(row["base_permissions"])) | set(json_load(row["extra_permissions"]))
+    return set(role_permissions("Guest"))
 
 
 def grantable_permissions_for(role_name: str) -> list[str]:
@@ -350,12 +366,14 @@ def log_action(actor: sqlite3.Row, action: str, against_custom_id: str = "N/A", 
 
 
 def log_staff_action(actor: sqlite3.Row, action: str, against_custom_id: str = "N/A", against_username: str = "N/A") -> None:
+    actor_name = actor["staff_agent_alias"] if actor["staff_mode"] and actor["staff_agent_alias"] else (actor["roblox_username"] or actor["username"])
     post_webhook(
         STAFF_ACTION_LOG_WEBHOOK,
         "Staff Command Logged",
         [
-            {"name": "Roblox Username", "value": actor["roblox_username"] or actor["username"]},
+            {"name": "Agent / Username", "value": actor_name},
             {"name": "Custom ID", "value": actor["custom_id"]},
+            {"name": "Custom-Agent-Code", "value": actor["staff_agent_code"] or "No active code"},
             {"name": "Date", "value": human_time()},
             {"name": "Action", "value": action},
             {"name": "Against Custom ID", "value": against_custom_id},
@@ -431,7 +449,8 @@ def reset_sessions_to_guest(
             SET username = ?, roblox_username = NULL, roblox_user_id = NULL,
                 role_name = 'Guest', verified = 0, verification_code = NULL,
                 verification_target = NULL, base_permissions = ?, extra_permissions = '[]',
-                forced_logout = ?
+                forced_logout = ?, staff_mode = 0, staff_agent_code = NULL,
+                staff_agent_alias = NULL, staff_access_expires_at = NULL
             WHERE session_key = ?
             """,
             (
@@ -460,7 +479,9 @@ def clear_stale_verification_claims(conn: sqlite3.Connection, roblox_user_id: in
             UPDATE sessions
             SET username = ?, roblox_username = NULL, roblox_user_id = NULL,
                 role_name = 'Guest', verification_code = NULL,
-                verification_target = NULL, base_permissions = ?, extra_permissions = '[]'
+                verification_target = NULL, base_permissions = ?, extra_permissions = '[]',
+                staff_mode = 0, staff_agent_code = NULL, staff_agent_alias = NULL,
+                staff_access_expires_at = NULL
             WHERE session_key = ?
             """,
             (
@@ -491,6 +512,172 @@ def find_target_session(target_ref: str) -> Optional[sqlite3.Row]:
     ).fetchone()
     conn.close()
     return row
+
+
+def agent_display_name(row: sqlite3.Row) -> str:
+    if row["staff_mode"] and row["staff_agent_alias"]:
+        return row["staff_agent_alias"]
+    return row["roblox_username"] or row["username"]
+
+
+def active_staff_access_row(
+    conn: sqlite3.Connection,
+    *,
+    custom_id: Optional[str] = None,
+    code_value: Optional[str] = None,
+) -> Optional[sqlite3.Row]:
+    clauses = ["active = 1", "(expires_at IS NULL OR expires_at > ?)"]
+    params: list[Any] = [now_ts()]
+    if custom_id:
+        clauses.append("target_custom_id = ?")
+        params.append(custom_id)
+    if code_value:
+        clauses.append("code_value = ?")
+        params.append(code_value)
+    query = f"""
+        SELECT *
+        FROM custom_agent_codes
+        WHERE {" AND ".join(clauses)}
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    return conn.execute(query, tuple(params)).fetchone()
+
+
+def clear_staff_mode_for_identity(
+    conn: sqlite3.Connection,
+    custom_id: str,
+    roblox_user_id: Optional[int] = None,
+) -> None:
+    conn.execute(
+        """
+        UPDATE sessions
+        SET staff_mode = 0, staff_agent_code = NULL, staff_agent_alias = NULL, staff_access_expires_at = NULL
+        WHERE custom_id = ?
+           OR (? IS NOT NULL AND roblox_user_id = ?)
+        """,
+        (custom_id, roblox_user_id, roblox_user_id),
+    )
+
+
+def expire_staff_code(
+    conn: sqlite3.Connection,
+    code_id: int,
+    reason: str,
+) -> None:
+    code = conn.execute("SELECT * FROM custom_agent_codes WHERE id = ?", (code_id,)).fetchone()
+    if not code:
+        return
+    conn.execute(
+        """
+        UPDATE custom_agent_codes
+        SET active = 0, expired_at = ?, updated_at = ?, expired_reason = ?
+        WHERE id = ?
+        """,
+        (now_ts(), now_ts(), reason, code_id),
+    )
+    if code["target_custom_id"]:
+        clear_staff_mode_for_identity(conn, code["target_custom_id"], code["target_roblox_user_id"])
+
+
+def sync_live_group_state(conn: sqlite3.Connection, row: sqlite3.Row) -> sqlite3.Row:
+    if not row["verified"] or not row["roblox_user_id"]:
+        return row
+    checked_at = row["staff_group_checked_at"] or 0
+    if now_ts() - checked_at < 6:
+        return row
+
+    try:
+        live_role_name, _rank = roblox_get_group_role(int(row["roblox_user_id"]))
+    except Exception:
+        conn.execute("UPDATE sessions SET staff_group_checked_at = ? WHERE session_key = ?", (now_ts(), row["session_key"]))
+        return conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
+    live_group_member = 1 if live_role_name != "Guest" else 0
+    current_group_member = int(row["is_group_member"] or 0)
+
+    if live_group_member != current_group_member or (live_group_member and live_role_name != row["role_name"]):
+        conn.execute(
+            """
+            UPDATE sessions
+            SET role_name = ?, base_permissions = ?, is_group_member = ?, staff_group_checked_at = ?
+            WHERE custom_id = ?
+            """,
+            (live_role_name, json_dump(role_permissions(live_role_name)), live_group_member, now_ts(), row["custom_id"]),
+        )
+        row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
+    else:
+        conn.execute("UPDATE sessions SET staff_group_checked_at = ? WHERE session_key = ?", (now_ts(), row["session_key"]))
+        row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
+
+    grant = active_staff_access_row(conn, custom_id=row["custom_id"])
+    active_code = active_staff_access_row(conn, code_value=row["staff_agent_code"]) if row["staff_agent_code"] else None
+    if row["staff_mode"] and row["staff_agent_code"] and not active_code:
+        clear_staff_mode_for_identity(conn, row["custom_id"], row["roblox_user_id"])
+        add_event(
+            row["custom_id"],
+            "staff_access_revoked",
+            {"message": "Your Custom-Agent-Code is no longer active, so the staff version has been closed."},
+        )
+        row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
+        grant = active_staff_access_row(conn, custom_id=row["custom_id"])
+
+    hq_roles = {"Headquarters", "Joint Chiefs", "Ownership"}
+    if row["staff_mode"] and not row["is_group_member"] and not grant and row["role_name"] not in hq_roles:
+        if row["staff_agent_code"]:
+            code_row = active_staff_access_row(conn, code_value=row["staff_agent_code"])
+            if code_row:
+                expire_staff_code(conn, int(code_row["id"]), "Roblox group membership revoked.")
+        clear_staff_mode_for_identity(conn, row["custom_id"], row["roblox_user_id"])
+        add_event(
+            row["custom_id"],
+            "staff_access_revoked",
+            {"message": "Your staff website access has been revoked because you are no longer in the Roblox group."},
+        )
+        row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
+
+    if row["staff_mode"] and row["staff_access_expires_at"] and row["staff_access_expires_at"] <= now_ts():
+        if row["staff_agent_code"]:
+            code_row = active_staff_access_row(conn, code_value=row["staff_agent_code"])
+            if code_row:
+                expire_staff_code(conn, int(code_row["id"]), "Custom-Agent-Code expired.")
+        clear_staff_mode_for_identity(conn, row["custom_id"], row["roblox_user_id"])
+        row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
+    return row
+
+
+def issue_staff_code(
+    conn: sqlite3.Connection,
+    actor: sqlite3.Row,
+    target: Optional[sqlite3.Row],
+    expires_at: Optional[int],
+) -> sqlite3.Row:
+    code_value = make_staff_agent_code()
+    while conn.execute("SELECT 1 FROM custom_agent_codes WHERE code_value = ?", (code_value,)).fetchone():
+        code_value = make_staff_agent_code()
+    created_at = now_ts()
+    conn.execute(
+        """
+        INSERT INTO custom_agent_codes (
+            code_value, target_custom_id, target_username, target_roblox_user_id,
+            target_roblox_username, target_role_name, granted_by_custom_id,
+            granted_by_username, expires_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            code_value,
+            target["custom_id"] if target else None,
+            (target["roblox_username"] or target["username"]) if target else None,
+            target["roblox_user_id"] if target else None,
+            target["roblox_username"] if target else None,
+            target["role_name"] if target else None,
+            actor["custom_id"],
+            actor["roblox_username"] or actor["username"],
+            expires_at,
+            created_at,
+            created_at,
+        ),
+    )
+    return conn.execute("SELECT * FROM custom_agent_codes WHERE code_value = ?", (code_value,)).fetchone()
 
 
 def inbox_for(custom_id: str) -> dict[str, Any]:
@@ -538,6 +725,20 @@ def active_messages_for(custom_id: str) -> list[dict[str, Any]]:
         })
     conn.close()
     return out
+
+
+def parse_staff_access_duration(raw: str) -> tuple[Optional[int], str]:
+    value = (raw or "").strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="Enter a number of minutes or PERMANENT.")
+    if value.upper() == "PERMANENT":
+        return None, "Permanent"
+    if not re.fullmatch(r"\d+", value):
+        raise HTTPException(status_code=400, detail="Enter a number of minutes or PERMANENT.")
+    minutes = int(value)
+    if minutes <= 0:
+        raise HTTPException(status_code=400, detail="Minutes must be above 0.")
+    return now_ts() + minutes * 60, minutes_to_label(minutes)
 
 
 def parse_duration(raw: str) -> tuple[Optional[int], str]:
@@ -744,7 +945,7 @@ def handle_permission_abuse(actor: sqlite3.Row, target: sqlite3.Row, action_name
 
     warning_count = (existing["warning_count"] + 1) if existing else 1
     suspended = warning_count >= 2
-    reason = "Permission abuse against a higher rank."
+    reason = "Permission abuse against a member of the same rank or higher."
 
     if existing:
         conn.execute(
@@ -803,13 +1004,13 @@ def handle_permission_abuse(actor: sqlite3.Row, target: sqlite3.Row, action_name
     add_event(
         actor["custom_id"],
         "permission_abuse_suspended" if suspended else "permission_abuse_warning",
-        {"message": "You have been temporarily suspended for permission abuse." if suspended else "Warning: do not use punishment commands against someone with a higher rank than you."},
+        {"message": "You have been temporarily suspended for permission abuse." if suspended else "Do not attempt to permission abuse otherwise there will be heavy consequences."},
     )
     log_permission_abuse(actor, target, action_name, suspended)
 
 
 def require_not_higher_rank(actor: sqlite3.Row, target: sqlite3.Row, action_name: str) -> None:
-    if role_level(target["role_name"]) > role_level(actor["role_name"]):
+    if role_level(target["role_name"]) >= role_level(actor["role_name"]):
         handle_permission_abuse(actor, target, action_name)
         raise HTTPException(status_code=403, detail="Permission abuse detected.")
 
@@ -936,6 +1137,12 @@ def setup_db() -> None:
     ensure_column(conn, "sessions", "suspended_reason", "suspended_reason TEXT")
     ensure_column(conn, "sessions", "created_at", "created_at INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "sessions", "last_seen_at", "last_seen_at INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "staff_mode", "staff_mode INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "staff_agent_code", "staff_agent_code TEXT")
+    ensure_column(conn, "sessions", "staff_agent_alias", "staff_agent_alias TEXT")
+    ensure_column(conn, "sessions", "staff_access_expires_at", "staff_access_expires_at INTEGER")
+    ensure_column(conn, "sessions", "is_group_member", "is_group_member INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "staff_group_checked_at", "staff_group_checked_at INTEGER NOT NULL DEFAULT 0")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS known_visitors (
@@ -1144,6 +1351,27 @@ def setup_db() -> None:
         )
     """)
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS custom_agent_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code_value TEXT NOT NULL UNIQUE,
+            target_custom_id TEXT,
+            target_username TEXT,
+            target_roblox_user_id INTEGER,
+            target_roblox_username TEXT,
+            target_role_name TEXT,
+            agent_alias TEXT,
+            granted_by_custom_id TEXT NOT NULL,
+            granted_by_username TEXT NOT NULL,
+            expires_at INTEGER,
+            active INTEGER NOT NULL DEFAULT 1,
+            linked_at INTEGER,
+            expired_at INTEGER,
+            expired_reason TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    """)
+    cur.execute("""
         INSERT OR IGNORE INTO interview_settings (
             id, is_open, updated_by_custom_id, updated_by_username, updated_at
         ) VALUES (1, 0, 'SYSTEM', 'System', 0)
@@ -1160,7 +1388,9 @@ def session_row(session_key: str) -> sqlite3.Row:
     row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (session_key,)).fetchone()
     if row:
         conn.execute("UPDATE sessions SET last_seen_at = ? WHERE session_key = ?", (now_ts(), session_key))
+        row = sync_live_group_state(conn, row)
         conn.commit()
+        row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (session_key,)).fetchone()
     conn.close()
     if not row:
         raise HTTPException(status_code=401, detail="Invalid session.")
@@ -1234,9 +1464,16 @@ def me(session_key: str):
         (row["custom_id"], row["roblox_username"] or row["username"]),
     ).fetchone()
     join_limit = conn.execute("SELECT * FROM join_limits WHERE active = 1 ORDER BY id DESC LIMIT 1").fetchone()
+    staff_grant = active_staff_access_row(conn, custom_id=row["custom_id"])
     conn.close()
     inbox = inbox_for(row["custom_id"])
     app_blacklisted = bool(app_blacklist and is_active(app_blacklist["until_ts"]))
+    effective_permissions = sorted(merged_permissions(row))
+
+    staff_access_allowed = bool(row["verified"]) and (
+        bool(row["is_group_member"]) or bool(staff_grant)
+    )
+
     return {
         "custom_id": row["custom_id"],
         "username": row["username"],
@@ -1245,12 +1482,19 @@ def me(session_key: str):
         "avatar_url": public_avatar_url(row["roblox_user_id"]),
         "role_name": row["role_name"],
         "verified": bool(row["verified"]),
+        "in_roblox_group": bool(row["is_group_member"]),
         "forced_logout": bool(row["forced_logout"]),
         "suspended": bool(row["suspended"]),
         "suspended_reason": row["suspended_reason"],
         "base_permissions": json_load(row["base_permissions"]),
         "extra_permissions": json_load(row["extra_permissions"]),
+        "effective_permissions": effective_permissions,
         "grantable_permissions": grantable_permissions_for(row["role_name"]),
+        "staff_mode": bool(row["staff_mode"]),
+        "staff_agent_code": row["staff_agent_code"],
+        "staff_agent_alias": row["staff_agent_alias"],
+        "staff_access_allowed": staff_access_allowed,
+        "staff_access_expires_at": staff_grant["expires_at"] if staff_grant else row["staff_access_expires_at"],
         "messages": active_messages_for(row["custom_id"]),
         "events": pending_events_for(row["custom_id"]),
         "inbox_unread_count": inbox["unread_count"],
@@ -1359,10 +1603,10 @@ def verification_check(payload: dict[str, Any]):
         """
         UPDATE sessions
         SET verified = 1, username = ?, role_name = ?, base_permissions = ?,
-            verification_code = NULL, forced_logout = 0
+            verification_code = NULL, forced_logout = 0, is_group_member = ?, staff_group_checked_at = ?
         WHERE session_key = ?
         """,
-        (username, role_name, json_dump(role_permissions(role_name)), row["session_key"]),
+        (username, role_name, json_dump(role_permissions(role_name)), 1 if role_name != "Guest" else 0, now_ts(), row["session_key"]),
     )
     conn.commit()
     conn.close()
@@ -1935,6 +2179,230 @@ def check_information(payload: dict[str, Any]):
     }
 
 
+@app.post("/api/staff/login")
+def staff_login(payload: dict[str, Any]):
+    row = session_row(payload["session_key"])
+    code_value = payload.get("agent_code", "").strip().upper()
+    if not row["verified"] or not row["roblox_user_id"]:
+        raise HTTPException(status_code=403, detail="You must verify your Roblox account first.")
+
+    hq_bypass = row["role_name"] in {"Headquarters", "Joint Chiefs", "Ownership"}
+
+    if hq_bypass and not code_value:
+        alias = make_staff_agent_alias()
+        conn = db()
+        conn.execute(
+            """
+            UPDATE sessions
+            SET staff_mode = 1, staff_agent_code = NULL, staff_agent_alias = ?, staff_access_expires_at = NULL
+            WHERE custom_id = ?
+            """,
+            (alias, row["custom_id"]),
+        )
+        conn.commit()
+        conn.close()
+        refreshed = session_row(payload["session_key"])
+        log_staff_action(refreshed, "Entered Staff Version (HQ Auto-Access)")
+        return {"success": True, "staff_agent_alias": alias, "staff_agent_code": None}
+
+    if not code_value:
+        raise HTTPException(status_code=400, detail="Please paste your Custom-Agent-Code in order to access the website.")
+
+    conn = db()
+    code = active_staff_access_row(conn, code_value=code_value)
+    if not code:
+        conn.close()
+        raise HTTPException(status_code=404, detail="That Custom-Agent-Code is invalid or expired.")
+    if code["target_custom_id"] and code["target_custom_id"] != row["custom_id"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="That Custom-Agent-Code is assigned to another user.")
+    if code["target_roblox_user_id"] and row["roblox_user_id"] and int(code["target_roblox_user_id"]) != int(row["roblox_user_id"]):
+        conn.close()
+        raise HTTPException(status_code=403, detail="That Custom-Agent-Code is linked to another Roblox account.")
+    if not row["is_group_member"] and not code["target_custom_id"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="Only Roblox group members can claim an unassigned Custom-Agent-Code.")
+
+    alias = code["agent_alias"] or make_staff_agent_alias()
+    expires_at = code["expires_at"]
+    conn.execute(
+        """
+        UPDATE custom_agent_codes
+        SET target_custom_id = ?, target_username = ?, target_roblox_user_id = ?,
+            target_roblox_username = ?, target_role_name = ?, agent_alias = ?, linked_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            row["custom_id"],
+            row["roblox_username"] or row["username"],
+            row["roblox_user_id"],
+            row["roblox_username"],
+            row["role_name"],
+            alias,
+            now_ts(),
+            now_ts(),
+            code["id"],
+        ),
+    )
+    conn.execute(
+        """
+        UPDATE sessions
+        SET staff_mode = 1, staff_agent_code = ?, staff_agent_alias = ?, staff_access_expires_at = ?
+        WHERE custom_id = ?
+        """,
+        (code_value, alias, expires_at, row["custom_id"]),
+    )
+    conn.commit()
+    conn.close()
+
+    refreshed = session_row(payload["session_key"])
+    log_staff_action(refreshed, "Entered Staff Version")
+    return {"success": True, "staff_agent_alias": alias, "staff_agent_code": code_value}
+
+
+@app.post("/api/staff/logout")
+def staff_logout(payload: dict[str, Any]):
+    row = session_row(payload["session_key"])
+    conn = db()
+    clear_staff_mode_for_identity(conn, row["custom_id"], row["roblox_user_id"])
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+
+@app.post("/api/staff/code/generate")
+def staff_code_generate(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "manage_staff_access")
+    expires_at, time_label = parse_staff_access_duration(payload.get("duration", "PERMANENT"))
+    conn = db()
+    code = issue_staff_code(conn, actor, None, expires_at)
+    conn.commit()
+    conn.close()
+    log_staff_action(actor, "Generate new Custom-Agent-Code")
+    return {"success": True, "code": code["code_value"], "time_label": time_label}
+
+
+@app.post("/api/staff/access/grant")
+def staff_access_grant(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "manage_staff_access")
+    target_custom_id = payload.get("target_custom_id", "").strip()
+    if not target_custom_id:
+        raise HTTPException(status_code=400, detail="Select a user.")
+    expires_at, time_label = parse_staff_access_duration(payload.get("duration", "PERMANENT"))
+
+    conn = db()
+    target = conn.execute("SELECT * FROM sessions WHERE custom_id = ?", (target_custom_id,)).fetchone()
+    if not target:
+        conn.close()
+        raise HTTPException(status_code=404, detail="User not found.")
+    code = issue_staff_code(conn, actor, target, expires_at)
+    conn.commit()
+    conn.close()
+
+    add_inbox_item(
+        target["custom_id"],
+        "Internal Affairs Staff Access",
+        f"Staff website access has been granted to you for {time_label}. Your Custom-Agent-Code is: {code['code_value']}",
+    )
+    add_event(target["custom_id"], "staff_access_granted", {"message": "Staff website access has been granted to you."})
+    log_staff_action(actor, "Give Staff Access", target["custom_id"], target["roblox_username"] or target["username"])
+    return {"success": True, "code": code["code_value"], "time_label": time_label}
+
+
+@app.post("/api/staff/access/revoke")
+def staff_access_revoke(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "manage_staff_access")
+    target_custom_id = payload.get("target_custom_id", "").strip()
+    code_id = int(payload.get("code_id", 0) or 0)
+    if not target_custom_id and not code_id:
+        raise HTTPException(status_code=400, detail="Missing target.")
+
+    conn = db()
+    rows = []
+    if code_id:
+        row = conn.execute("SELECT * FROM custom_agent_codes WHERE id = ?", (code_id,)).fetchone()
+        if row:
+            rows.append(row)
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM custom_agent_codes
+            WHERE target_custom_id = ? AND active = 1 AND (expires_at IS NULL OR expires_at > ?)
+            """,
+            (target_custom_id, now_ts()),
+        ).fetchall()
+    if not rows:
+        conn.close()
+        raise HTTPException(status_code=404, detail="No active staff access found.")
+
+    affected_custom_ids = set()
+    for row in rows:
+        if row["target_custom_id"]:
+            affected_custom_ids.add(row["target_custom_id"])
+        expire_staff_code(conn, int(row["id"]), "Staff access revoked by Headquarters.")
+    conn.commit()
+    conn.close()
+
+    for affected_custom_id in affected_custom_ids:
+        add_event(affected_custom_id, "staff_access_revoked", {"message": "Your staff website access has been revoked."})
+        add_inbox_item(affected_custom_id, "Internal Affairs Staff Access", "Your staff website access has been revoked.")
+    log_staff_action(actor, "Revoke Staff Access", target_custom_id or "N/A", "Custom-Agent-Code")
+    return {"success": True}
+
+
+@app.get("/api/staff/agents")
+def staff_agents_database(session_key: str):
+    actor = require_permission(session_key, "manage_staff_access")
+    conn = db()
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM custom_agent_codes
+        WHERE linked_at IS NOT NULL
+        ORDER BY updated_at DESC
+        """
+    ).fetchall()
+    conn.close()
+    log_staff_action(actor, "Check Agents Database")
+    return {"items": [dict(x) for x in rows]}
+
+
+@app.get("/api/staff/codes")
+def staff_codes_database(session_key: str):
+    actor = require_permission(session_key, "manage_staff_access")
+    conn = db()
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM custom_agent_codes
+        ORDER BY active DESC, created_at DESC
+        """
+    ).fetchall()
+    conn.close()
+    log_staff_action(actor, "Custom-Agent-Code Database")
+    return {"items": [dict(x) for x in rows]}
+
+
+@app.post("/api/staff/code/expire")
+def staff_code_expire(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "manage_staff_access")
+    code_id = int(payload.get("code_id", 0))
+    if not code_id:
+        raise HTTPException(status_code=400, detail="Missing code.")
+    conn = db()
+    row = conn.execute("SELECT * FROM custom_agent_codes WHERE id = ?", (code_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Code not found.")
+    expire_staff_code(conn, code_id, "Custom-Agent-Code expired manually.")
+    conn.commit()
+    conn.close()
+    if row["target_custom_id"]:
+        add_event(row["target_custom_id"], "staff_access_revoked", {"message": "Your Custom-Agent-Code has expired."})
+    log_staff_action(actor, "Expire Custom-Agent-Code", row["target_custom_id"] or "N/A", row["code_value"])
+    return {"success": True}
+
+
 @app.post("/api/appeal")
 def appeal(payload: dict[str, Any]):
     row = session_row(payload["session_key"])
@@ -2128,6 +2596,8 @@ def interview_apply(payload: dict[str, Any]):
     )
     log_action(row, "Submitted Interview Application")
     return {"success": True}
+
+
 @app.post("/api/website-shutdown")
 def website_shutdown(payload: dict[str, Any]):
     actor = require_permission(payload["session_key"], "manage_website_shutdown")
@@ -2263,7 +2733,7 @@ def tickets_claim(payload: dict[str, Any]):
         raise HTTPException(status_code=404, detail="Ticket not found.")
     conn.execute(
         "UPDATE tickets SET claimed_by_custom_id = ?, claimed_by_username = ?, updated_at = ? WHERE id = ?",
-        (actor["custom_id"], actor["roblox_username"] or actor["username"], now_ts(), ticket_id),
+        (actor["custom_id"], agent_display_name(actor), now_ts(), ticket_id),
     )
     conn.commit()
     conn.close()
@@ -2289,7 +2759,7 @@ def tickets_reply(payload: dict[str, Any]):
         raise HTTPException(status_code=403, detail="No access.")
     conn.execute(
         "INSERT INTO ticket_messages (ticket_id, sender_custom_id, sender_username, sender_role, message, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (ticket_id, row["custom_id"], row["roblox_username"] or row["username"], row["role_name"], message, now_ts()),
+        (ticket_id, row["custom_id"], agent_display_name(row), row["role_name"], message, now_ts()),
     )
     conn.execute("UPDATE tickets SET updated_at = ? WHERE id = ?", (now_ts(), ticket_id))
     conn.commit()
@@ -2372,7 +2842,6 @@ def permission_abuse_unsuspend(payload: dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
-
+    port = int(os.getenv("PORT", "8000"))
+    host = "0.0.0.0" if os.getenv("RENDER") or os.getenv("PORT") else "127.0.0.1"
+    uvicorn.run("main:app", host=host, port=port, reload=True)
