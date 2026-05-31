@@ -271,11 +271,20 @@ def make_staff_agent_code() -> str:
 
 
 def make_staff_agent_alias() -> str:
-    return "Agent IA-" + "".join(random.choices(string.digits, k=8))
+    names = [
+        "Jones", "Reed", "Stone", "Hayes", "Knight", "Cross", "Voss", "Ward",
+        "Pierce", "Vale", "Brooks", "Frost", "Blake", "Sloan", "Wells", "Carter",
+        "Mason", "Rook", "Archer", "Fox", "Hale", "Monroe", "Sterling", "Bishop",
+    ]
+    return f"Agent {random.choice(names)}"
 
 
 def role_level(role_name: str) -> int:
     return ROLE_LEVELS.get(role_name, 0)
+
+
+def rank_power(row: sqlite3.Row) -> int:
+    return int(row["group_rank"] or role_level(row["role_name"]))
 
 
 def role_permissions(role_name: str) -> list[str]:
@@ -450,7 +459,8 @@ def reset_sessions_to_guest(
                 role_name = 'Guest', verified = 0, verification_code = NULL,
                 verification_target = NULL, base_permissions = ?, extra_permissions = '[]',
                 forced_logout = ?, staff_mode = 0, staff_agent_code = NULL,
-                staff_agent_alias = NULL, staff_access_expires_at = NULL
+                staff_agent_alias = NULL, staff_access_expires_at = NULL,
+                is_group_member = 0, group_rank = NULL
             WHERE session_key = ?
             """,
             (
@@ -481,7 +491,7 @@ def clear_stale_verification_claims(conn: sqlite3.Connection, roblox_user_id: in
                 role_name = 'Guest', verification_code = NULL,
                 verification_target = NULL, base_permissions = ?, extra_permissions = '[]',
                 staff_mode = 0, staff_agent_code = NULL, staff_agent_alias = NULL,
-                staff_access_expires_at = NULL
+                staff_access_expires_at = NULL, is_group_member = 0, group_rank = NULL
             WHERE session_key = ?
             """,
             (
@@ -588,21 +598,21 @@ def sync_live_group_state(conn: sqlite3.Connection, row: sqlite3.Row) -> sqlite3
         return row
 
     try:
-        live_role_name, _rank = roblox_get_group_role(int(row["roblox_user_id"]))
+        live_role_name, live_rank = roblox_get_group_role(int(row["roblox_user_id"]))
     except Exception:
         conn.execute("UPDATE sessions SET staff_group_checked_at = ? WHERE session_key = ?", (now_ts(), row["session_key"]))
         return conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
     live_group_member = 1 if live_role_name != "Guest" else 0
     current_group_member = int(row["is_group_member"] or 0)
 
-    if live_group_member != current_group_member or (live_group_member and live_role_name != row["role_name"]):
+    if live_group_member != current_group_member or (live_group_member and (live_role_name != row["role_name"] or live_rank != row["group_rank"])):
         conn.execute(
             """
             UPDATE sessions
-            SET role_name = ?, base_permissions = ?, is_group_member = ?, staff_group_checked_at = ?
+            SET role_name = ?, base_permissions = ?, is_group_member = ?, group_rank = ?, staff_group_checked_at = ?
             WHERE custom_id = ?
             """,
-            (live_role_name, json_dump(role_permissions(live_role_name)), live_group_member, now_ts(), row["custom_id"]),
+            (live_role_name, json_dump(role_permissions(live_role_name)), live_group_member, live_rank, now_ts(), row["custom_id"]),
         )
         row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
     else:
@@ -621,8 +631,7 @@ def sync_live_group_state(conn: sqlite3.Connection, row: sqlite3.Row) -> sqlite3
         row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
         grant = active_staff_access_row(conn, custom_id=row["custom_id"])
 
-    hq_roles = {"Headquarters", "Joint Chiefs", "Ownership"}
-    if row["staff_mode"] and not row["is_group_member"] and not grant and row["role_name"] not in hq_roles:
+    if row["staff_mode"] and not row["is_group_member"]:
         if row["staff_agent_code"]:
             code_row = active_staff_access_row(conn, code_value=row["staff_agent_code"])
             if code_row:
@@ -659,9 +668,9 @@ def issue_staff_code(
         """
         INSERT INTO custom_agent_codes (
             code_value, target_custom_id, target_username, target_roblox_user_id,
-            target_roblox_username, target_role_name, granted_by_custom_id,
-            granted_by_username, expires_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            target_roblox_username, target_role_name, target_group_rank, agent_alias,
+            granted_by_custom_id, granted_by_username, expires_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             code_value,
@@ -670,6 +679,8 @@ def issue_staff_code(
             target["roblox_user_id"] if target else None,
             target["roblox_username"] if target else None,
             target["role_name"] if target else None,
+            target["group_rank"] if target else None,
+            make_staff_agent_alias(),
             actor["custom_id"],
             actor["roblox_username"] or actor["username"],
             expires_at,
@@ -1010,7 +1021,7 @@ def handle_permission_abuse(actor: sqlite3.Row, target: sqlite3.Row, action_name
 
 
 def require_not_higher_rank(actor: sqlite3.Row, target: sqlite3.Row, action_name: str) -> None:
-    if role_level(target["role_name"]) >= role_level(actor["role_name"]):
+    if rank_power(target) >= rank_power(actor):
         handle_permission_abuse(actor, target, action_name)
         raise HTTPException(status_code=403, detail="Permission abuse detected.")
 
@@ -1142,6 +1153,7 @@ def setup_db() -> None:
     ensure_column(conn, "sessions", "staff_agent_alias", "staff_agent_alias TEXT")
     ensure_column(conn, "sessions", "staff_access_expires_at", "staff_access_expires_at INTEGER")
     ensure_column(conn, "sessions", "is_group_member", "is_group_member INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "group_rank", "group_rank INTEGER")
     ensure_column(conn, "sessions", "staff_group_checked_at", "staff_group_checked_at INTEGER NOT NULL DEFAULT 0")
 
     cur.execute("""
@@ -1359,6 +1371,7 @@ def setup_db() -> None:
             target_roblox_user_id INTEGER,
             target_roblox_username TEXT,
             target_role_name TEXT,
+            target_group_rank INTEGER,
             agent_alias TEXT,
             granted_by_custom_id TEXT NOT NULL,
             granted_by_username TEXT NOT NULL,
@@ -1371,6 +1384,7 @@ def setup_db() -> None:
             updated_at INTEGER NOT NULL
         )
     """)
+    ensure_column(conn, "custom_agent_codes", "target_group_rank", "target_group_rank INTEGER")
     cur.execute("""
         INSERT OR IGNORE INTO interview_settings (
             id, is_open, updated_by_custom_id, updated_by_username, updated_at
@@ -1471,7 +1485,7 @@ def me(session_key: str):
     effective_permissions = sorted(merged_permissions(row))
 
     staff_access_allowed = bool(row["verified"]) and (
-        bool(row["is_group_member"]) or bool(staff_grant)
+        bool(row["is_group_member"]) or role_level(row["role_name"]) >= role_level("Headquarters")
     )
 
     return {
@@ -1481,6 +1495,7 @@ def me(session_key: str):
         "roblox_user_id": row["roblox_user_id"],
         "avatar_url": public_avatar_url(row["roblox_user_id"]),
         "role_name": row["role_name"],
+        "group_rank": row["group_rank"],
         "verified": bool(row["verified"]),
         "in_roblox_group": bool(row["is_group_member"]),
         "forced_logout": bool(row["forced_logout"]),
@@ -1595,7 +1610,7 @@ def verification_check(payload: dict[str, Any]):
     if row["verification_code"] not in description:
         raise HTTPException(status_code=400, detail="Something went wrong, please retry.")
 
-    role_name, _rank = roblox_get_group_role(int(row["roblox_user_id"]))
+    role_name, rank = roblox_get_group_role(int(row["roblox_user_id"]))
     username = row["roblox_username"] or row["username"]
 
     conn = db()
@@ -1603,10 +1618,10 @@ def verification_check(payload: dict[str, Any]):
         """
         UPDATE sessions
         SET verified = 1, username = ?, role_name = ?, base_permissions = ?,
-            verification_code = NULL, forced_logout = 0, is_group_member = ?, staff_group_checked_at = ?
+            verification_code = NULL, forced_logout = 0, is_group_member = ?, group_rank = ?, staff_group_checked_at = ?
         WHERE session_key = ?
         """,
-        (username, role_name, json_dump(role_permissions(role_name)), 1 if role_name != "Guest" else 0, now_ts(), row["session_key"]),
+        (username, role_name, json_dump(role_permissions(role_name)), 1 if role_name != "Guest" else 0, rank, now_ts(), row["session_key"]),
     )
     conn.commit()
     conn.close()
@@ -1763,7 +1778,8 @@ def bulk_force_logout(payload: dict[str, Any]):
         target = conn.execute("SELECT * FROM sessions WHERE custom_id = ?", (target_id,)).fetchone()
         if not target:
             continue
-        if role_level(target["role_name"]) > role_level(actor["role_name"]):
+        if rank_power(target) >= rank_power(actor):
+            handle_permission_abuse(actor, target, "Bulk Force Logout")
             continue
         reset_sessions_to_guest(conn, target["custom_id"], target["roblox_user_id"], forced_logout=1)
         done.append(target)
@@ -2189,7 +2205,7 @@ def staff_login(payload: dict[str, Any]):
     hq_bypass = row["role_name"] in {"Headquarters", "Joint Chiefs", "Ownership"}
 
     if hq_bypass and not code_value:
-        alias = make_staff_agent_alias()
+        alias = row["staff_agent_alias"] or make_staff_agent_alias()
         conn = db()
         conn.execute(
             """
@@ -2213,15 +2229,18 @@ def staff_login(payload: dict[str, Any]):
     if not code:
         conn.close()
         raise HTTPException(status_code=404, detail="That Custom-Agent-Code is invalid or expired.")
+    if code["linked_at"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="That Custom-Agent-Code is already bound to an agent.")
     if code["target_custom_id"] and code["target_custom_id"] != row["custom_id"]:
         conn.close()
-        raise HTTPException(status_code=403, detail="That Custom-Agent-Code is assigned to another user.")
-    if code["target_roblox_user_id"] and row["roblox_user_id"] and int(code["target_roblox_user_id"]) != int(row["roblox_user_id"]):
+        raise HTTPException(status_code=403, detail="That Custom-Agent-Code is reserved for another user.")
+    if code["target_roblox_user_id"] and int(code["target_roblox_user_id"]) != int(row["roblox_user_id"]):
         conn.close()
-        raise HTTPException(status_code=403, detail="That Custom-Agent-Code is linked to another Roblox account.")
-    if not row["is_group_member"] and not code["target_custom_id"]:
+        raise HTTPException(status_code=403, detail="That Custom-Agent-Code is reserved for another Roblox account.")
+    if not row["is_group_member"]:
         conn.close()
-        raise HTTPException(status_code=403, detail="Only Roblox group members can claim an unassigned Custom-Agent-Code.")
+        raise HTTPException(status_code=403, detail="Only Roblox group members can use a Custom-Agent-Code.")
 
     alias = code["agent_alias"] or make_staff_agent_alias()
     expires_at = code["expires_at"]
@@ -2229,7 +2248,7 @@ def staff_login(payload: dict[str, Any]):
         """
         UPDATE custom_agent_codes
         SET target_custom_id = ?, target_username = ?, target_roblox_user_id = ?,
-            target_roblox_username = ?, target_role_name = ?, agent_alias = ?, linked_at = ?, updated_at = ?
+            target_roblox_username = ?, target_role_name = ?, target_group_rank = ?, agent_alias = ?, linked_at = ?, updated_at = ?
         WHERE id = ?
         """,
         (
@@ -2238,6 +2257,7 @@ def staff_login(payload: dict[str, Any]):
             row["roblox_user_id"],
             row["roblox_username"],
             row["role_name"],
+            row["group_rank"],
             alias,
             now_ts(),
             now_ts(),
@@ -2295,6 +2315,9 @@ def staff_access_grant(payload: dict[str, Any]):
     if not target:
         conn.close()
         raise HTTPException(status_code=404, detail="User not found.")
+    if not target["verified"] or not target["is_group_member"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="Staff access can only be given to verified Roblox group members.")
     code = issue_staff_code(conn, actor, target, expires_at)
     conn.commit()
     conn.close()
@@ -2673,6 +2696,14 @@ def contact_open(payload: dict[str, Any]):
         raise HTTPException(status_code=400, detail="Subject is required.")
 
     conn = db()
+    existing = conn.execute(
+        "SELECT id FROM tickets WHERE opener_custom_id = ? AND status = 'OPEN' ORDER BY updated_at DESC LIMIT 1",
+        (row["custom_id"],),
+    ).fetchone()
+    if existing:
+        conn.close()
+        return {"success": True, "ticket_id": existing["id"], "already_open": True}
+
     conn.execute(
         "INSERT INTO tickets (opener_custom_id, opener_username, subject, status, created_at, updated_at) VALUES (?, ?, ?, 'OPEN', ?, ?)",
         (row["custom_id"], row["roblox_username"] or row["username"], subject, now_ts(), now_ts()),
@@ -2731,6 +2762,12 @@ def tickets_claim(payload: dict[str, Any]):
     if not ticket:
         conn.close()
         raise HTTPException(status_code=404, detail="Ticket not found.")
+    if ticket["status"] != "OPEN":
+        conn.close()
+        raise HTTPException(status_code=400, detail="Closed tickets cannot be handled.")
+    if ticket["claimed_by_custom_id"] and ticket["claimed_by_custom_id"] != actor["custom_id"]:
+        conn.close()
+        raise HTTPException(status_code=400, detail="This ticket is already being handled.")
     conn.execute(
         "UPDATE tickets SET claimed_by_custom_id = ?, claimed_by_username = ?, updated_at = ? WHERE id = ?",
         (actor["custom_id"], agent_display_name(actor), now_ts(), ticket_id),
@@ -2754,9 +2791,20 @@ def tickets_reply(payload: dict[str, Any]):
     if not ticket:
         conn.close()
         raise HTTPException(status_code=404, detail="Ticket not found.")
+    if ticket["status"] != "OPEN":
+        conn.close()
+        raise HTTPException(status_code=400, detail="This ticket is closed.")
     if row["custom_id"] != ticket["opener_custom_id"] and "view_tickets" not in merged_permissions(row):
         conn.close()
         raise HTTPException(status_code=403, detail="No access.")
+    if row["custom_id"] != ticket["opener_custom_id"] and ticket["claimed_by_custom_id"] and ticket["claimed_by_custom_id"] != row["custom_id"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="This ticket is already assigned to another agent.")
+    if row["custom_id"] != ticket["opener_custom_id"] and not ticket["claimed_by_custom_id"]:
+        conn.execute(
+            "UPDATE tickets SET claimed_by_custom_id = ?, claimed_by_username = ? WHERE id = ?",
+            (row["custom_id"], agent_display_name(row), ticket_id),
+        )
     conn.execute(
         "INSERT INTO ticket_messages (ticket_id, sender_custom_id, sender_username, sender_role, message, created_at) VALUES (?, ?, ?, ?, ?, ?)",
         (ticket_id, row["custom_id"], agent_display_name(row), row["role_name"], message, now_ts()),
@@ -2790,9 +2838,20 @@ def tickets_close(payload: dict[str, Any]):
     if not ticket:
         conn.close()
         raise HTTPException(status_code=404, detail="Ticket not found.")
+    if ticket["status"] != "OPEN":
+        conn.close()
+        raise HTTPException(status_code=400, detail="This ticket is already closed.")
+    if ticket["claimed_by_custom_id"] and ticket["claimed_by_custom_id"] != actor["custom_id"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="This ticket is assigned to another agent.")
     conn.execute(
-        "UPDATE tickets SET status = 'CLOSED', close_reason = ?, updated_at = ? WHERE id = ?",
-        (reason, now_ts(), ticket_id),
+        """
+        UPDATE tickets
+        SET status = 'CLOSED', close_reason = ?, claimed_by_custom_id = COALESCE(claimed_by_custom_id, ?),
+            claimed_by_username = COALESCE(claimed_by_username, ?), updated_at = ?
+        WHERE id = ?
+        """,
+        (reason, actor["custom_id"], agent_display_name(actor), now_ts(), ticket_id),
     )
     conn.commit()
     conn.close()
