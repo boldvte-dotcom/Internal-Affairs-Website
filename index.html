@@ -1074,6 +1074,338 @@
     .content-stage-enter{animation:panelSwapIn .7s cubic-bezier(.16,.84,.24,1) both}
     .arc-reveal.is-visible{animation:revealCascade .74s cubic-bezier(.16,.84,.24,1) both}
 
+    /* Futuristic IA command theme: blue, crimson, and black. */
+    :root{
+      --bg-deep:#01040a; --bg-mid:#050b14; --bg-light:#0b1322;
+      --primary:#32d8ff; --primary-glow:rgba(50,216,255,.34);
+      --secondary:#ff2d55; --secondary-glow:rgba(255,45,85,.32);
+      --accent:#8ff3ff; --accent-glow:rgba(143,243,255,.24);
+      --success:#35e0a1; --success-glow:rgba(53,224,161,.22);
+      --danger:#ff2d55; --danger-glow:rgba(255,45,85,.32);
+      --warning:#ffd166; --warning-glow:rgba(255,209,102,.22);
+      --text-primary:#f7fbff; --text-secondary:#b8c9dc; --text-muted:#718399;
+      --glass-bg:rgba(4,9,18,.82); --glass-border:rgba(143,243,255,.16);
+      --shadow-glow:0 0 78px rgba(50,216,255,.14);
+      --shadow-card:0 34px 110px rgba(0,0,0,.72);
+      --gradient-primary:linear-gradient(135deg,#32d8ff 0%,#8ff3ff 42%,#ff2d55 100%);
+      --gradient-dark:linear-gradient(180deg,rgba(1,4,10,.98),rgba(5,11,20,.98));
+      --gradient-glass:linear-gradient(180deg,rgba(50,216,255,.075),rgba(255,45,85,.035));
+      --red:var(--secondary); --cyan:var(--primary); --cyan2:var(--accent); --shadow:var(--shadow-card); --muted:var(--text-muted);
+    }
+    html,body{
+      font-family:"Rajdhani","Orbitron","Montserrat","Aptos","Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+      color:var(--text-primary);
+      text-rendering:geometricPrecision;
+    }
+    body{
+      background:
+        radial-gradient(circle at 18% 10%,rgba(50,216,255,.16),transparent 32%),
+        radial-gradient(circle at 88% 4%,rgba(255,45,85,.12),transparent 28%),
+        radial-gradient(circle at 58% 92%,rgba(50,216,255,.08),transparent 36%),
+        linear-gradient(180deg,#01040a 0%,#050912 48%,#020206 100%);
+    }
+    .bg-mesh,.bg-orbs{display:none}
+    .bg-aurora{
+      display:block;opacity:.55;filter:blur(72px);
+      background:radial-gradient(circle at 18% 34%,rgba(50,216,255,.16),transparent 32%),radial-gradient(circle at 80% 58%,rgba(255,45,85,.12),transparent 34%);
+    }
+    .bg-stars{opacity:.22;filter:none}
+    .bg-grid{
+      opacity:.7;
+      background:linear-gradient(rgba(50,216,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(50,216,255,.035) 1px,transparent 1px);
+      background-size:56px 56px;
+      mask-image:radial-gradient(ellipse at center,rgba(0,0,0,.92),transparent 78%);
+      animation:futureGrid 14s linear infinite;
+    }
+    .bg-scan{background:linear-gradient(180deg,transparent,rgba(50,216,255,.045),transparent);opacity:.7}
+    .bg-command{opacity:.78;filter:none}
+    .bg-command::before{
+      opacity:.38;
+      background:
+        linear-gradient(90deg,transparent 12%,rgba(50,216,255,.16) 12.1%,transparent 12.34%),
+        linear-gradient(90deg,transparent 39%,rgba(255,45,85,.14) 39.1%,transparent 39.34%),
+        linear-gradient(90deg,transparent 74%,rgba(50,216,255,.12) 74.1%,transparent 74.34%),
+        linear-gradient(180deg,transparent 24%,rgba(50,216,255,.13) 24.1%,transparent 24.34%),
+        linear-gradient(180deg,transparent 67%,rgba(255,45,85,.12) 67.1%,transparent 67.34%);
+    }
+    .bg-command::after{opacity:.34;mix-blend-mode:screen}
+    .bg-command-hud,.bg-command-map,.bg-command-feed{
+      border-radius:14px;border-color:rgba(143,243,255,.14);
+      background:linear-gradient(180deg,rgba(5,13,25,.32),rgba(2,5,10,.16));
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 0 42px rgba(50,216,255,.055);
+    }
+    .bg-command-hud::after,.bg-command-map::after,.bg-command-feed::after{color:rgba(143,243,255,.7)}
+    .mouse-glow{
+      opacity:.46;
+      background:radial-gradient(circle 430px at var(--mx) var(--my),rgba(50,216,255,.12),transparent 66%),radial-gradient(circle 560px at calc(var(--mx) + 12%) calc(var(--my) + 8%),rgba(255,45,85,.08),transparent 68%);
+    }
+    .sidebar,.panel,.modal-box,.chat-shell,.terminal-window,.verification-shell,.ticket-console,.restricted-box,.terminated-box{
+      border-radius:16px;
+      border:1px solid rgba(143,243,255,.14);
+      background:linear-gradient(180deg,rgba(6,13,25,.88),rgba(2,5,10,.95));
+      box-shadow:0 34px 110px rgba(0,0,0,.68),0 0 0 1px rgba(255,45,85,.035),inset 0 1px 0 rgba(255,255,255,.05);
+      backdrop-filter:blur(20px) saturate(1.18);
+    }
+    .sidebar::before,.panel::before,.hero-card::before,.content-card::before,.list-card::before,.modal-box::before{
+      background:linear-gradient(90deg,transparent,var(--primary),var(--secondary),transparent);
+      height:1px;
+    }
+    .headline,.futuristic,.panel-title,.verification-title,.site-title,.command-name,.system-value,.stat-value{
+      font-family:"Rajdhani","Orbitron","Montserrat","Segoe UI",sans-serif;
+      letter-spacing:.03em;
+      text-transform:uppercase;
+      color:#f9fdff;
+      text-shadow:0 0 24px rgba(50,216,255,.08);
+    }
+    .site-title{
+      font-size:30px;
+      background:linear-gradient(90deg,#f7fbff 0%,#8ff3ff 48%,#ff6b86 100%);
+      -webkit-background-clip:text;background-clip:text;color:transparent;
+    }
+    .sub,.panel-copy,.command-desc,.system-copy,.ticket-message-body{color:var(--text-secondary)}
+    .nav-button,.panel-button,.btn{
+      border-radius:10px;
+      border:1px solid rgba(143,243,255,.15);
+      background:linear-gradient(135deg,rgba(50,216,255,.11),rgba(5,12,23,.92));
+      color:#f7fbff;
+      font-weight:950;
+      letter-spacing:.12em;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 14px 38px rgba(0,0,0,.28);
+      position:relative;
+      overflow:hidden;
+    }
+    .nav-button::after,.panel-button::after,.btn::after{
+      content:"";position:absolute;inset:-1px;
+      background:linear-gradient(110deg,transparent 0 35%,rgba(143,243,255,.22) 45%,transparent 58% 100%);
+      transform:translateX(-130%);transition:transform .72s cubic-bezier(.16,.84,.24,1);
+      pointer-events:none;
+    }
+    .nav-button:hover::after,.panel-button:hover::after,.btn:hover::after{transform:translateX(130%)}
+    .nav-button:hover,.panel-button:hover,.btn:hover{
+      transform:translateY(-3px);
+      border-color:rgba(143,243,255,.42);
+      background:linear-gradient(135deg,rgba(50,216,255,.18),rgba(255,45,85,.08));
+      box-shadow:0 20px 52px rgba(0,0,0,.38),0 0 34px rgba(50,216,255,.1);
+    }
+    .btn-red,.nav-button.btn-red,.panel-button.btn-red{
+      background:linear-gradient(135deg,rgba(255,45,85,.22),rgba(18,5,10,.92));
+      border-color:rgba(255,45,85,.34);
+    }
+    .btn-red:hover,.nav-button.btn-red:hover,.panel-button.btn-red:hover{
+      border-color:rgba(255,90,120,.68);
+      box-shadow:0 20px 52px rgba(0,0,0,.38),0 0 34px rgba(255,45,85,.16);
+    }
+    .btn-green,.btn-blue,.btn-brown,.btn-gold{background:linear-gradient(135deg,rgba(50,216,255,.12),rgba(5,12,23,.92));border-color:rgba(143,243,255,.18)}
+    .input,.select,textarea{
+      border-radius:12px;
+      border:1px solid rgba(143,243,255,.14);
+      background:rgba(1,6,13,.72);
+      color:var(--text-primary);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .input:focus,.select:focus,textarea:focus{
+      outline:none;
+      border-color:rgba(143,243,255,.58);
+      box-shadow:0 0 0 3px rgba(50,216,255,.09),0 0 32px rgba(50,216,255,.1);
+    }
+    .hero-card,.content-card,.list-card,.stat-card,.inbox-card,.command-card,.system-card,.parchment-row,.dashboard-inbox,.profile-chip,.interview-status-frame{
+      border-radius:16px;
+      border:1px solid rgba(143,243,255,.13);
+      background:linear-gradient(180deg,rgba(50,216,255,.055),rgba(255,45,85,.025));
+      box-shadow:0 24px 72px rgba(0,0,0,.36),inset 0 1px 0 rgba(255,255,255,.045);
+    }
+    .list-card:hover,.stat-card:hover,.inbox-card:hover,.command-card:hover,.system-card:hover,.dashboard-inbox:hover,.profile-chip:hover{
+      border-color:rgba(143,243,255,.38);
+      transform:translateY(-5px);
+      box-shadow:0 28px 80px rgba(0,0,0,.42),0 0 32px rgba(50,216,255,.07);
+    }
+    .panel-hero{
+      border-radius:18px;
+      border:1px solid rgba(143,243,255,.15);
+      background:radial-gradient(circle at 12% 20%,rgba(50,216,255,.13),transparent 28%),linear-gradient(135deg,rgba(50,216,255,.07),rgba(255,45,85,.035));
+      overflow:hidden;
+    }
+    .panel-kicker,.command-label,.system-title,.stat-label,.verification-kicker,.ticket-kicker{
+      color:rgba(143,243,255,.74);
+      letter-spacing:.32em;
+    }
+    .panel-title{font-size:clamp(38px,5.5vw,86px)}
+    .modal{background:rgba(0,0,0,.76);backdrop-filter:blur(18px)}
+    .modal-box{animation:modalIn .44s cubic-bezier(.16,.84,.24,1) both}
+    .chat-header,.ticket-console-head,.terminal-head{background:rgba(50,216,255,.045);border-bottom:1px solid rgba(143,243,255,.12)}
+    .ticket-status.open{color:#dffcff;background:rgba(50,216,255,.12);border-color:rgba(50,216,255,.38)}
+    .ticket-status.closed{color:#ffe3ea;background:rgba(255,45,85,.12);border-color:rgba(255,45,85,.38)}
+    .terminated-screen{
+      background:radial-gradient(circle at 50% 18%,rgba(255,45,85,.16),transparent 34%),linear-gradient(180deg,rgba(1,4,10,.98),rgba(3,3,6,.99));
+    }
+    .terminated-box::before{color:var(--secondary);letter-spacing:.34em}
+    .terminated-box .sub{color:var(--text-secondary)}
+    .report-shell{display:grid;gap:18px;min-width:min(820px,88vw)}
+    .report-hero{
+      position:relative;overflow:hidden;border-radius:18px;padding:26px;
+      border:1px solid rgba(143,243,255,.16);
+      background:radial-gradient(circle at 16% 18%,rgba(50,216,255,.18),transparent 34%),radial-gradient(circle at 92% 18%,rgba(255,45,85,.16),transparent 32%),linear-gradient(135deg,rgba(5,13,25,.92),rgba(3,6,12,.95));
+    }
+    .report-hero::after{
+      content:"";position:absolute;left:-20%;right:-20%;top:0;height:1px;
+      background:linear-gradient(90deg,transparent,var(--primary),var(--secondary),transparent);
+      animation:crimsonSweep 2.8s ease-in-out infinite;
+    }
+    .report-kicker{font-size:12px;font-weight:950;letter-spacing:.34em;text-transform:uppercase;color:rgba(143,243,255,.76)}
+    .report-title{margin:10px 0 6px;font-size:clamp(34px,6vw,58px);line-height:.92;font-weight:950;text-transform:uppercase;color:#fff}
+    .report-sub{margin:0;max-width:620px;color:var(--text-secondary);line-height:1.65}
+    .report-priority-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .report-priority{
+      padding:13px 14px;border-radius:14px;border:1px solid rgba(143,243,255,.14);
+      background:rgba(50,216,255,.045);font-size:12px;font-weight:950;letter-spacing:.14em;text-transform:uppercase;color:var(--text-secondary);
+      animation:reportEnter .55s cubic-bezier(.16,.84,.24,1) both;
+    }
+    .report-priority span{color:#fff;margin-right:8px}
+    .report-priority.crimson{border-color:rgba(255,45,85,.22);background:rgba(255,45,85,.055)}
+    .report-priority.red{border-color:rgba(255,45,85,.3)}
+    .report-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+    .report-field{display:grid;gap:8px;animation:reportEnter .62s cubic-bezier(.16,.84,.24,1) both}
+    .report-field label{font-size:11px;font-weight:950;letter-spacing:.22em;text-transform:uppercase;color:rgba(143,243,255,.72)}
+    .report-wide{grid-column:1 / -1}
+    .report-control{width:100%;min-height:48px}
+    textarea.report-control{min-height:118px;resize:vertical;line-height:1.55}
+    .report-upload-zone{
+      display:grid;gap:12px;padding:16px;border-radius:16px;
+      border:1px dashed rgba(143,243,255,.28);
+      background:linear-gradient(135deg,rgba(50,216,255,.065),rgba(255,45,85,.035));
+    }
+    .report-upload-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .report-upload-copy{color:var(--text-secondary);font-size:14px;line-height:1.55}
+    .report-file-input{display:none}
+    .report-preview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+    .report-preview-card{
+      position:relative;overflow:hidden;border-radius:14px;border:1px solid rgba(143,243,255,.16);
+      background:rgba(1,6,13,.78);box-shadow:0 16px 40px rgba(0,0,0,.28);
+      animation:reportEnter .42s cubic-bezier(.16,.84,.24,1) both;
+    }
+    .report-preview-card img{width:100%;height:112px;object-fit:cover;display:block;background:#02060d}
+    .report-preview-meta{padding:10px 12px;display:grid;gap:4px}
+    .report-preview-name{font-size:12px;font-weight:950;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .report-preview-size{font-size:11px;color:var(--text-muted)}
+    .report-preview-remove{
+      position:absolute;right:8px;top:8px;border:none;border-radius:999px;padding:6px 9px;
+      background:rgba(255,45,85,.88);color:#fff;font-weight:950;cursor:pointer;
+      box-shadow:0 10px 24px rgba(0,0,0,.34);
+    }
+    .report-panel-note{
+      border-radius:14px;border:1px solid rgba(255,45,85,.22);
+      background:linear-gradient(90deg,rgba(255,45,85,.09),rgba(50,216,255,.045));
+      color:var(--text-secondary);padding:14px 16px;line-height:1.55;
+    }
+    .report-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .staff-unlock-shell{
+      position:relative;overflow:hidden;width:min(960px,92vw);min-height:620px;
+      display:grid;grid-template-columns:310px minmax(0,1fr);gap:0;
+      border-radius:22px;border:1px solid rgba(143,243,255,.18);
+      background:
+        radial-gradient(circle at 18% 18%,rgba(50,216,255,.18),transparent 34%),
+        radial-gradient(circle at 92% 76%,rgba(255,45,85,.12),transparent 36%),
+        linear-gradient(135deg,rgba(4,10,20,.98),rgba(1,4,10,.98));
+      box-shadow:0 36px 120px rgba(0,0,0,.72),inset 0 1px 0 rgba(255,255,255,.055);
+    }
+    .staff-unlock-shell::before{
+      content:"";position:absolute;inset:0;
+      background:linear-gradient(rgba(143,243,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(143,243,255,.035) 1px,transparent 1px);
+      background-size:34px 34px;mask-image:radial-gradient(circle at 32% 35%,rgba(0,0,0,.8),transparent 72%);
+      animation:futureGrid 14s linear infinite;pointer-events:none;
+    }
+    .staff-unlock-visual{
+      position:relative;padding:34px 26px;border-right:1px solid rgba(143,243,255,.12);
+      display:grid;align-content:space-between;gap:22px;z-index:1;
+      background:linear-gradient(180deg,rgba(50,216,255,.055),rgba(255,45,85,.025));
+    }
+    .staff-unlock-orb{position:relative;width:220px;height:220px;margin:0 auto;display:grid;place-items:center}
+    .staff-unlock-orb::before,.staff-unlock-orb::after{
+      content:"";position:absolute;border-radius:50%;inset:0;border:1px solid rgba(143,243,255,.38);
+      box-shadow:0 0 42px rgba(50,216,255,.12),inset 0 0 28px rgba(50,216,255,.06);
+      animation:verificationSpin 12s linear infinite;
+    }
+    .staff-unlock-orb::after{inset:22px;border-style:dashed;border-color:rgba(255,255,255,.18);animation:verificationSpinReverse 8s linear infinite}
+    .staff-unlock-core{
+      position:relative;width:118px;height:118px;border-radius:30px;
+      background:linear-gradient(145deg,rgba(50,216,255,.95),rgba(58,116,196,.82));
+      box-shadow:0 18px 45px rgba(0,0,0,.38),0 0 42px rgba(50,216,255,.22);
+      display:grid;place-items:center;animation:staffCorePulse 2.4s ease-in-out infinite;
+    }
+    .staff-unlock-core::before{
+      content:"";position:absolute;left:50%;top:-58px;width:70px;height:86px;transform:translateX(-50%);
+      border:11px solid #eaffff;border-bottom:none;border-radius:42px 42px 0 0;
+      box-shadow:0 0 26px rgba(143,243,255,.22);
+    }
+    .staff-unlock-core::after{
+      content:"";width:14px;height:42px;border-radius:999px;background:#f7fbff;
+      box-shadow:0 -20px 0 -3px #f7fbff,0 0 20px rgba(255,255,255,.58);
+    }
+    .staff-unlock-metrics{display:grid;gap:12px}
+    .staff-unlock-metric{
+      padding:13px 14px;border-radius:14px;border:1px solid rgba(143,243,255,.14);
+      background:rgba(1,6,13,.55);
+    }
+    .staff-unlock-metric span{display:block;font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:rgba(143,243,255,.66);font-weight:950}
+    .staff-unlock-metric strong{display:block;margin-top:6px;color:#fff;font-size:18px;letter-spacing:.04em}
+    .staff-unlock-content{position:relative;z-index:1;padding:42px 38px;display:grid;align-content:center;gap:18px}
+    .staff-unlock-kicker{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:950;letter-spacing:.34em;text-transform:uppercase;color:rgba(143,243,255,.78)}
+    .staff-unlock-kicker::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--secondary);box-shadow:0 0 20px rgba(255,45,85,.58)}
+    .staff-unlock-title{
+      margin:0;font-size:clamp(48px,7vw,76px);line-height:.86;font-weight:950;letter-spacing:.02em;text-transform:uppercase;
+      background:linear-gradient(90deg,#f7fbff 0%,#b8f5ff 42%,#ff6f8d 100%);
+      -webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;
+    }
+    .staff-unlock-desc{margin:0;max-width:640px;color:var(--text-secondary);line-height:1.75;font-size:16px}
+    .staff-unlock-progress{
+      height:10px;border-radius:999px;overflow:hidden;border:1px solid rgba(143,243,255,.16);
+      background:rgba(1,6,13,.78);box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .staff-unlock-progress-bar{
+      width:8%;height:100%;border-radius:inherit;
+      background:linear-gradient(90deg,var(--primary),var(--accent),var(--secondary));
+      box-shadow:0 0 28px rgba(50,216,255,.22);
+      transition:width .6s cubic-bezier(.16,.84,.24,1);
+    }
+    .staff-sequence.unlock-sequence{gap:12px}
+    .staff-sequence.unlock-sequence .staff-sequence-row{
+      position:relative;grid-template-columns:58px 1fr auto;padding:16px 18px;border-radius:16px;
+      border:1px solid rgba(143,243,255,.13);
+      background:linear-gradient(90deg,rgba(5,13,25,.82),rgba(2,6,13,.82));
+      color:rgba(184,201,220,.62);overflow:hidden;
+    }
+    .staff-sequence.unlock-sequence .staff-sequence-row::before{
+      content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:rgba(143,243,255,.18);
+      transition:background .35s ease,box-shadow .35s ease;
+    }
+    .staff-sequence.unlock-sequence .staff-sequence-row::after{
+      content:"STANDBY";font-size:10px;font-weight:950;letter-spacing:.18em;color:rgba(113,131,153,.72);
+    }
+    .staff-sequence.unlock-sequence .staff-sequence-row.active{
+      color:#f7fbff;border-color:rgba(143,243,255,.52);
+      background:linear-gradient(90deg,rgba(50,216,255,.18),rgba(5,13,25,.86));
+      transform:translateX(6px) scale(1.01);box-shadow:0 20px 52px rgba(0,0,0,.34),0 0 34px rgba(50,216,255,.12);
+    }
+    .staff-sequence.unlock-sequence .staff-sequence-row.active::before{background:var(--primary);box-shadow:0 0 20px rgba(50,216,255,.8)}
+    .staff-sequence.unlock-sequence .staff-sequence-row.active::after{content:"RUNNING";color:var(--accent)}
+    .staff-sequence.unlock-sequence .staff-sequence-row.done{
+      color:rgba(216,255,242,.88);border-color:rgba(53,224,161,.25);
+      background:linear-gradient(90deg,rgba(53,224,161,.12),rgba(5,13,25,.78));
+    }
+    .staff-sequence.unlock-sequence .staff-sequence-row.done::before{background:var(--success);box-shadow:0 0 18px rgba(53,224,161,.6)}
+    .staff-sequence.unlock-sequence .staff-sequence-row.done::after{content:"ONLINE";color:rgba(53,224,161,.9)}
+    .staff-sequence.unlock-sequence .staff-sequence-index{font-size:12px;font-weight:950;letter-spacing:.2em;color:inherit}
+    .staff-sequence.unlock-sequence .staff-sequence-text{font-size:16px;font-weight:800;letter-spacing:.03em}
+    .staff-unlock-status{
+      justify-self:center;margin-top:2px;padding:10px 18px;border-radius:999px;border:1px solid rgba(143,243,255,.24);
+      background:rgba(5,13,25,.86);color:var(--accent);font-size:12px;font-weight:950;letter-spacing:.22em;text-transform:uppercase;
+      box-shadow:0 16px 38px rgba(0,0,0,.34),0 0 28px rgba(50,216,255,.08);
+    }
+    @keyframes staffCorePulse{0%,100%{transform:translateY(0);filter:brightness(1)}50%{transform:translateY(-5px);filter:brightness(1.18)}}
+    @keyframes futureGrid{from{background-position:0 0,0 0}to{background-position:56px 56px,56px 56px}}
+    @keyframes crimsonSweep{0%,100%{transform:translateX(-30%);opacity:.25}50%{transform:translateX(30%);opacity:.9}}
+    @keyframes reportEnter{from{opacity:0;transform:translateY(18px);filter:blur(10px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+
     @media (max-width:980px){
       .layout{grid-template-columns:1fr;padding:18px}
       .sidebar{position:static}
@@ -1092,6 +1424,15 @@
       .verification-lock-beam{height:170px}
       .verification-title{font-size:clamp(28px,9vw,42px)}
       .profile-anchor{position:static;margin:16px}
+      .report-shell{min-width:0}
+      .report-priority-strip,.report-grid,.report-actions{grid-template-columns:1fr}
+      .staff-unlock-shell{width:min(94vw,720px);min-height:auto;grid-template-columns:1fr}
+      .staff-unlock-visual{border-right:none;border-bottom:1px solid rgba(143,243,255,.12);padding:24px}
+      .staff-unlock-orb{width:170px;height:170px}
+      .staff-unlock-content{padding:28px 20px}
+      .staff-unlock-title{font-size:clamp(36px,12vw,52px)}
+      .staff-sequence.unlock-sequence .staff-sequence-row{grid-template-columns:44px 1fr;padding:14px}
+      .staff-sequence.unlock-sequence .staff-sequence-row::after{display:none}
     }
   </style>
 </head>
@@ -1993,23 +2334,49 @@ Audit channel transmitting</div>
         "Routing command permissions...",
         "Loading staff panels and secure systems..."
       ];
-      el("genericModalBox").innerHTML = modalChrome(staffAccessFrame(
-        "Staff Version Unlocking",
-        "Your command-network access is being assembled piece by piece. Please stand by while the protected systems come online.",
-        `
-          <div class="staff-sequence" id="staffSequenceBox">
-            ${steps.map((step, index) => `
-              <div class="staff-sequence-row ${index === 0 ? "active" : ""}" data-staff-step="${index}">
-                <span class="staff-sequence-index">0${index + 1}</span>
-                <span class="staff-sequence-text">${step}</span>
+      el("genericModalBox").innerHTML = modalChrome(`
+        <div class="staff-unlock-shell">
+          <div class="staff-unlock-visual">
+            <div class="staff-unlock-orb">
+              <div class="staff-unlock-core"></div>
+            </div>
+            <div class="staff-unlock-metrics">
+              <div class="staff-unlock-metric">
+                <span>Clearance Layer</span>
+                <strong>IA-STAFF</strong>
               </div>
-            `).join("")}
+              <div class="staff-unlock-metric">
+                <span>Network State</span>
+                <strong id="staffUnlockMetric">BOOTING</strong>
+              </div>
+            </div>
           </div>
-        `
-      ));
+          <div class="staff-unlock-content">
+            <div class="staff-unlock-kicker">Internal Affairs Staff Network</div>
+            <h1 class="staff-unlock-title">Staff Version<br>Unlocking</h1>
+            <p class="staff-unlock-desc">Your command-network access is being assembled piece by piece. Protected systems, permissions, and staff panels are coming online.</p>
+            <div class="staff-unlock-progress">
+              <div class="staff-unlock-progress-bar" id="staffUnlockProgressBar"></div>
+            </div>
+            <div class="staff-sequence unlock-sequence" id="staffSequenceBox">
+              ${steps.map((step, index) => `
+                <div class="staff-sequence-row ${index === 0 ? "active" : ""}" data-staff-step="${index}">
+                  <span class="staff-sequence-index">0${index + 1}</span>
+                  <span class="staff-sequence-text">${step}</span>
+                </div>
+              `).join("")}
+            </div>
+            <div class="staff-unlock-status" id="staffUnlockStatus">Staff network uplink</div>
+          </div>
+        </div>
+      `);
       showModal("genericModal");
 
       for (let i = 0; i < steps.length; i++) {
+        const progress = Math.round(((i + 1) / steps.length) * 100);
+        if (el("staffUnlockProgressBar")) el("staffUnlockProgressBar").style.width = `${progress}%`;
+        if (el("staffUnlockMetric")) el("staffUnlockMetric").textContent = i === steps.length - 1 ? "ONLINE" : "SYNCING";
+        if (el("staffUnlockStatus")) el("staffUnlockStatus").textContent = steps[i].replace("...", "");
         document.querySelectorAll("[data-staff-step]").forEach(node => {
           const index = Number(node.getAttribute("data-staff-step"));
           node.classList.toggle("active", index === i);
@@ -2404,47 +2771,182 @@ Audit channel transmitting</div>
     }
 
     function openReportModal() {
+      let evidenceImages = [];
+      const imageLimit = 5;
+      const maxImageBytes = 4 * 1024 * 1024;
+
       el("genericModalBox").innerHTML = modalChrome(`
-        <h2 class="headline futuristic" style="font-size:28px;">Divisional Report</h2>
-        <div class="row">
-          <input class="input" id="reportUsername" placeholder="Username">
-          <select class="select" id="reportDivision">
-            <option value="">Division</option>
-            <option>APU</option>
-            <option>SWAT</option>
-            <option>TCU</option>
-            <option>SPD</option>
-            <option>Internal Affairs</option>
-          </select>
-          <select class="select" id="reportUrgency">
-            <option value="">Urgency</option>
-            <option>Low</option>
-            <option>Middle</option>
-            <option>High</option>
-          </select>
-          <textarea id="reportReason" placeholder="Reason of your report"></textarea>
-          <textarea id="reportEvidence" placeholder="Evidence"></textarea>
-          <div class="grid-2">
-            <button class="btn btn-green" id="submitReportBtn">Submit</button>
+        <div class="report-shell">
+          <div class="report-hero">
+            <div class="report-kicker">Internal Affairs Intake</div>
+            <h2 class="report-title">Divisional Report</h2>
+            <p class="report-sub">Send a clean incident packet to the command network. Keep it factual, specific, and backed by evidence.</p>
+          </div>
+          <div class="report-priority-strip">
+            <div class="report-priority blue"><span>01</span> Identify</div>
+            <div class="report-priority crimson"><span>02</span> Classify</div>
+            <div class="report-priority red"><span>03</span> Evidence</div>
+          </div>
+          <div class="report-grid">
+            <div class="report-field">
+              <label for="reportUsername">Reported Username</label>
+              <input class="input report-control" id="reportUsername" placeholder="Roblox username">
+            </div>
+            <div class="report-field">
+              <label for="reportDivision">Division</label>
+              <select class="select report-control" id="reportDivision">
+                <option value="">Select division</option>
+                <option>APU</option>
+                <option>SWAT</option>
+                <option>TCU</option>
+                <option>SPD</option>
+                <option>Internal Affairs</option>
+              </select>
+            </div>
+            <div class="report-field">
+              <label for="reportUrgency">Urgency Level</label>
+              <select class="select report-control" id="reportUrgency">
+                <option value="">Select urgency</option>
+                <option>Low</option>
+                <option>Middle</option>
+                <option>High</option>
+              </select>
+            </div>
+            <div class="report-field report-wide">
+              <label for="reportReason">Reason</label>
+              <textarea class="report-control" id="reportReason" placeholder="Describe what happened, who was involved, and why IA should review it."></textarea>
+            </div>
+            <div class="report-field report-wide">
+              <label for="reportEvidence">Evidence</label>
+              <textarea class="report-control" id="reportEvidence" placeholder="Paste links, screenshots, witness notes, clips, or other proof."></textarea>
+            </div>
+            <div class="report-field report-wide">
+              <label>Picture Evidence</label>
+              <div class="report-upload-zone">
+                <div class="report-upload-head">
+                  <div class="report-upload-copy">Import up to 5 pictures. They will appear as previews and be sent with this divisional report.</div>
+                  <button class="btn btn-blue" type="button" id="reportImportPicturesBtn">Import Pictures</button>
+                </div>
+                <input class="report-file-input" id="reportPictureInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple>
+                <div class="report-preview-grid" id="reportPicturePreview"></div>
+              </div>
+            </div>
+          </div>
+          <div class="report-panel-note">
+            Reports are logged for review. Submitting false or spam reports may restrict access to the report system.
+          </div>
+          <div class="report-actions">
+            <button class="btn btn-blue" id="submitReportBtn">Submit Report</button>
             <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
           </div>
         </div>
       `);
       showModal("genericModal");
-      el("submitReportBtn").onclick = async () => {
-        await api("/api/report", {
-          method: "POST",
-          body: JSON.stringify({
-            session_key: sessionKey,
-            target_username: el("reportUsername").value.trim(),
-            division: el("reportDivision").value,
-            urgency: el("reportUrgency").value,
-            reason: el("reportReason").value.trim(),
-            evidence: el("reportEvidence").value.trim()
-          })
+
+      const formatFileSize = (bytes) => {
+        if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      };
+      const renderPicturePreview = () => {
+        const preview = el("reportPicturePreview");
+        if (!preview) return;
+        preview.innerHTML = evidenceImages.map((img, index) => `
+          <div class="report-preview-card">
+            <button class="report-preview-remove" type="button" data-report-image-remove="${index}">X</button>
+            <img src="${img.data_url}" alt="${safeText(img.name)} preview">
+            <div class="report-preview-meta">
+              <div class="report-preview-name">${safeText(img.name)}</div>
+              <div class="report-preview-size">${safeText(img.type)} | ${formatFileSize(img.size)}</div>
+            </div>
+          </div>
+        `).join("");
+        preview.querySelectorAll("[data-report-image-remove]").forEach(btn => {
+          btn.onclick = () => {
+            evidenceImages.splice(Number(btn.dataset.reportImageRemove), 1);
+            renderPicturePreview();
+          };
         });
-        hideModal("genericModal");
-        toast("Report submitted successfully.", 2500);
+      };
+      const readImageFile = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data_url: reader.result
+        });
+        reader.onerror = () => reject(new Error(`Unable to import ${file.name}.`));
+        reader.readAsDataURL(file);
+      });
+
+      el("reportImportPicturesBtn").onclick = () => el("reportPictureInput").click();
+      el("reportPictureInput").onchange = async (event) => {
+        const files = Array.from(event.target.files || []);
+        event.target.value = "";
+        if (!files.length) return;
+        const openSlots = imageLimit - evidenceImages.length;
+        if (openSlots <= 0) {
+          topSlider(`You can only import ${imageLimit} pictures for one report.`, 4200);
+          return;
+        }
+        const accepted = [];
+        for (const file of files.slice(0, openSlots)) {
+          if (!file.type.startsWith("image/")) {
+            topSlider(`${file.name} is not a valid image.`, 4200);
+            continue;
+          }
+          if (file.size > maxImageBytes) {
+            topSlider(`${file.name} is too large. Max size is 4 MB.`, 4200);
+            continue;
+          }
+          accepted.push(file);
+        }
+        if (files.length > openSlots) {
+          topSlider(`Only ${openSlots} more picture${openSlots === 1 ? "" : "s"} can be added.`, 4200);
+        }
+        try {
+          const imported = await Promise.all(accepted.map(readImageFile));
+          evidenceImages = evidenceImages.concat(imported);
+          renderPicturePreview();
+        } catch (err) {
+          topSlider(err.message || "Unable to import pictures.", 4500);
+        }
+      };
+
+      el("submitReportBtn").onclick = async () => {
+        const payload = {
+          session_key: sessionKey,
+          target_username: el("reportUsername").value.trim(),
+          division: el("reportDivision").value,
+          urgency: el("reportUrgency").value,
+          reason: el("reportReason").value.trim(),
+          evidence: el("reportEvidence").value.trim(),
+          evidence_images: evidenceImages
+        };
+        if (!payload.target_username || !payload.division || !payload.urgency || !payload.reason || (!payload.evidence && !payload.evidence_images.length)) {
+          topSlider("Complete every divisional report field before submitting.", 4200);
+          return;
+        }
+        try {
+          el("submitReportBtn").disabled = true;
+          el("submitReportBtn").textContent = "Transmitting...";
+          await api("/api/report", {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+          ["reportUsername", "reportDivision", "reportUrgency", "reportReason", "reportEvidence"].forEach(id => {
+            const node = el(id);
+            if (node) node.value = "";
+          });
+          evidenceImages = [];
+          renderPicturePreview();
+          hideModal("genericModal");
+          toast("Report submitted successfully.", 2500);
+        } catch (err) {
+          el("submitReportBtn").disabled = false;
+          el("submitReportBtn").textContent = "Submit Report";
+          topSlider(err.message || "Unable to submit report.", 4500);
+        }
       };
     }
 
