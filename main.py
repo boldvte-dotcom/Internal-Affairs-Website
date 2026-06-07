@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import io
 import json
 import os
 import random
@@ -25,6 +27,9 @@ REPORT_LOG_WEBHOOK = "https://discord.com/api/webhooks/1487913699468513290/rBQf5
 APPEAL_LOG_WEBHOOK = "https://discord.com/api/webhooks/1494822440877035561/dYkRfikUYXYjRq_vr9FVLEYaDFjgCkUxMUncze2DA0Rt3srL-CPc7f59iIhfvUvVa-3X"
 PERMISSION_ABUSE_WEBHOOK = "https://discord.com/api/webhooks/1490475547925680248/efCrT5jds6-LsKFGQfWugvbS28YseOaG_HM1dhFTc3Uj9G5PGiV0b-WvAekPd4pihmLQ"
 INTERVIEW_LOG_WEBHOOK = "https://discord.com/api/webhooks/1502750825645080780/7dopNSSb1lTZLRYYtr3U8H7I8rqreK-T-QxIx_QpoBO_mAC_vr7raYVkLBvMLlJABZYM"
+PATROL_LOG_WEBHOOK = STAFF_ACTION_LOG_WEBHOOK
+PATROL_WEEKLY_QUOTA_HOURS = 4.0
+PATROL_LOCK_OFFSET_SECONDS = -5 * 60 * 60
 
 ROBLOX_GROUP_ID = 36058174
 ROBLOX_GROUP_URL = "https://www.roblox.com/communities/36058174/Internal-Affairs-SFPD#!/about"
@@ -67,6 +72,7 @@ ROLE_PERMISSIONS = {
         "contact_access",
         "ticket_status_access",
         "view_low_rank_panel",
+        "log_patrol",
         "report_blacklist",
         "send_inbox_message",
         "view_tickets",
@@ -78,6 +84,7 @@ ROLE_PERMISSIONS = {
         "contact_access",
         "ticket_status_access",
         "view_low_rank_panel",
+        "log_patrol",
         "report_blacklist",
         "send_inbox_message",
         "view_tickets",
@@ -94,6 +101,7 @@ ROLE_PERMISSIONS = {
         "contact_access",
         "ticket_status_access",
         "view_low_rank_panel",
+        "log_patrol",
         "report_blacklist",
         "send_inbox_message",
         "view_tickets",
@@ -104,6 +112,8 @@ ROLE_PERMISSIONS = {
         "give_permissions",
         "review_appeals",
         "view_high_rank_panel",
+        "review_patrols",
+        "delete_patrols",
         "remove_permissions",
         "terminate_user",
         "revoke_report_blacklist",
@@ -118,6 +128,7 @@ ROLE_PERMISSIONS = {
         "contact_access",
         "ticket_status_access",
         "view_low_rank_panel",
+        "log_patrol",
         "report_blacklist",
         "send_inbox_message",
         "view_tickets",
@@ -128,6 +139,8 @@ ROLE_PERMISSIONS = {
         "give_permissions",
         "review_appeals",
         "view_high_rank_panel",
+        "review_patrols",
+        "delete_patrols",
         "remove_permissions",
         "terminate_user",
         "revoke_report_blacklist",
@@ -149,6 +162,7 @@ ROLE_PERMISSIONS = {
         "contact_access",
         "ticket_status_access",
         "view_low_rank_panel",
+        "log_patrol",
         "report_blacklist",
         "send_inbox_message",
         "view_tickets",
@@ -159,6 +173,8 @@ ROLE_PERMISSIONS = {
         "give_permissions",
         "review_appeals",
         "view_high_rank_panel",
+        "review_patrols",
+        "delete_patrols",
         "remove_permissions",
         "terminate_user",
         "revoke_report_blacklist",
@@ -182,6 +198,7 @@ ROLE_PERMISSIONS = {
         "contact_access",
         "ticket_status_access",
         "view_low_rank_panel",
+        "log_patrol",
         "report_blacklist",
         "send_inbox_message",
         "view_tickets",
@@ -192,6 +209,8 @@ ROLE_PERMISSIONS = {
         "give_permissions",
         "review_appeals",
         "view_high_rank_panel",
+        "review_patrols",
+        "delete_patrols",
         "remove_permissions",
         "terminate_user",
         "revoke_report_blacklist",
@@ -356,6 +375,85 @@ def post_webhook(url: str, title: str, fields: list[dict[str, str]], footer: str
         )
     except Exception:
         pass
+
+
+def report_image_attachments(evidence_images: list[Any]) -> list[dict[str, Any]]:
+    attachments: list[dict[str, Any]] = []
+    total_bytes = 0
+    allowed_types = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+    }
+    for index, item in enumerate(evidence_images[:5], start=1):
+        if not isinstance(item, dict):
+            continue
+        content_type = str(item.get("type", "")).strip().lower()
+        data_url = str(item.get("data_url", ""))
+        if content_type not in allowed_types or not data_url.startswith("data:") or ";base64," not in data_url:
+            continue
+        try:
+            header, encoded = data_url.split(",", 1)
+            header_type = header[5:].split(";", 1)[0].lower()
+            if header_type in allowed_types:
+                content_type = header_type
+            raw = base64.b64decode(encoded, validate=True)
+        except Exception:
+            continue
+        if not raw or len(raw) > 8 * 1024 * 1024:
+            continue
+        if total_bytes + len(raw) > 23 * 1024 * 1024:
+            break
+        original_name = str(item.get("name", "")).strip()
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", original_name).strip("._")
+        if not safe_name:
+            safe_name = f"evidence_{index}{allowed_types[content_type]}"
+        if "." not in safe_name:
+            safe_name = f"{safe_name}{allowed_types[content_type]}"
+        attachments.append({
+            "filename": f"{index}_{safe_name}"[:120],
+            "content_type": content_type,
+            "bytes": raw,
+            "size": len(raw),
+        })
+        total_bytes += len(raw)
+    return attachments
+
+
+def post_report_webhook_with_images(url: str, title: str, fields: list[dict[str, str]], images: list[dict[str, Any]], footer: str = "") -> None:
+    if not url or "PUT_" in url:
+        return
+    if not images:
+        post_webhook(url, title, fields, footer)
+        return
+    embeds = [{
+        "title": title,
+        "color": 0x32D8FF,
+        "fields": [{"name": x["name"], "value": x["value"], "inline": False} for x in fields],
+        "footer": {"text": footer} if footer else {},
+    }]
+    for image in images[:5]:
+        embeds.append({
+            "title": image["filename"],
+            "color": 0xFF2D55,
+            "image": {"url": f"attachment://{image['filename']}"},
+        })
+    files = []
+    try:
+        for index, image in enumerate(images[:5]):
+            files.append((
+                f"files[{index}]",
+                (image["filename"], io.BytesIO(image["bytes"]), image["content_type"]),
+            ))
+        requests.post(
+            url,
+            data={"payload_json": json.dumps({"embeds": embeds})},
+            files=files,
+            timeout=12,
+        )
+    except Exception:
+        post_webhook(url, title, fields, footer)
 
 
 def log_action(actor: sqlite3.Row, action: str, against_custom_id: str = "N/A", against_username: str = "N/A") -> None:
@@ -1796,6 +1894,13 @@ def bulk_force_logout(payload: dict[str, Any]):
 @app.post("/api/report")
 def submit_report(payload: dict[str, Any]):
     row = session_row(payload["session_key"])
+    evidence_images = payload.get("evidence_images") or []
+    if not isinstance(evidence_images, list):
+        evidence_images = []
+    evidence_attachments = report_image_attachments(evidence_images)
+    evidence_image_names = []
+    for item in evidence_attachments:
+        evidence_image_names.append(f"{item['filename']} ({round(item['size'] / 1024)} KB)")
     conn = db()
     blacklist = conn.execute(
         "SELECT * FROM report_blacklists WHERE username = ? OR custom_id = ?",
@@ -1826,16 +1931,23 @@ def submit_report(payload: dict[str, Any]):
     conn.commit()
     conn.close()
 
-    post_webhook(
+    webhook_fields = [
+        {"name": "Username of the person being reported", "value": payload.get("target_username", "")},
+        {"name": "Division", "value": payload.get("division", "")},
+        {"name": "Urgency Level", "value": payload.get("urgency", "")},
+        {"name": "Reason of your report", "value": payload.get("reason", "")},
+        {"name": "Evidence", "value": payload.get("evidence", "") or "Picture evidence attached."},
+    ]
+    if evidence_image_names:
+        webhook_fields.append({
+            "name": "Imported Picture Evidence",
+            "value": "\n".join(evidence_image_names)[:1024],
+        })
+    post_report_webhook_with_images(
         REPORT_LOG_WEBHOOK,
         "Divisional Report Logged & Ready For Review",
-        [
-            {"name": "Username of the person being reported", "value": payload.get("target_username", "")},
-            {"name": "Division", "value": payload.get("division", "")},
-            {"name": "Urgency Level", "value": payload.get("urgency", "")},
-            {"name": "Reason of your report", "value": payload.get("reason", "")},
-            {"name": "Evidence", "value": payload.get("evidence", "")},
-        ],
+        webhook_fields,
+        evidence_attachments,
         footer=row["custom_id"],
     )
     log_action(row, "Submitted Divisional Report")
