@@ -1991,7 +1991,7 @@ Audit channel transmitting</div>
           <p class="verification-desc">
             ${forceLogout
               ? "Your previous session was released, so command access is locked again until your Roblox identity is re-confirmed."
-              : "Before we unlock the Internal Affairs systems, we need to confirm that the Roblox account belongs to you."}
+              : "In order to access the website and its features, please verify your roblox account."}
           </p>
           <div class="verification-card">
             <h3 class="verification-card-title">What happens next</h3>
@@ -2328,11 +2328,11 @@ Audit channel transmitting</div>
 
     async function playStaffVersionUnlock() {
       const steps = [
-        "Decrypting staff uplink...",
-        "Synchronizing Roblox identity...",
-        "Binding Custom-Agent-Code to your agent record...",
-        "Routing command permissions...",
-        "Loading staff panels and secure systems..."
+        "Checking Custom-Agent-Code...",
+        "Comparing Custom-Agent-Code with CAC database...",
+        "Communicating with Secure-System, awaiting Approval...",
+        "Creating Custom Agent Name...",
+        "Adding user into registration, loading Panels and Features, Building Link..."
       ];
       el("genericModalBox").innerHTML = modalChrome(`
         <div class="staff-unlock-shell">
