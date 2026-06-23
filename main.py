@@ -28,7 +28,7 @@ APPEAL_LOG_WEBHOOK = "https://discord.com/api/webhooks/1494822440877035561/dYkRf
 PERMISSION_ABUSE_WEBHOOK = "https://discord.com/api/webhooks/1490475547925680248/efCrT5jds6-LsKFGQfWugvbS28YseOaG_HM1dhFTc3Uj9G5PGiV0b-WvAekPd4pihmLQ"
 INTERVIEW_LOG_WEBHOOK = "https://discord.com/api/webhooks/1502750825645080780/7dopNSSb1lTZLRYYtr3U8H7I8rqreK-T-QxIx_QpoBO_mAC_vr7raYVkLBvMLlJABZYM"
 PATROL_LOG_WEBHOOK = STAFF_ACTION_LOG_WEBHOOK
-PATROL_WEEKLY_QUOTA_HOURS = 4.0
+PATROL_WEEKLY_QUOTA_HOURS = 3.0
 PATROL_LOCK_OFFSET_SECONDS = -5 * 60 * 60
 
 ROBLOX_GROUP_ID = 36058174
@@ -254,6 +254,43 @@ def now_ts() -> int:
 
 def human_time(ts: Optional[int] = None) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts or now_ts()))
+
+
+def patrol_local_ts(ts: Optional[int] = None) -> int:
+    return (ts or now_ts()) + PATROL_LOCK_OFFSET_SECONDS
+
+
+def patrol_week_start_ts(ts: Optional[int] = None) -> int:
+    local_now = patrol_local_ts(ts)
+    local_day_start = local_now - (local_now % 86400)
+    # time.gmtime(...).tm_wday uses Monday=0, Sunday=6.
+    days_since_monday = time.gmtime(local_now).tm_wday
+    return local_day_start - (days_since_monday * 86400) - PATROL_LOCK_OFFSET_SECONDS
+
+
+def patrol_week_end_ts(ts: Optional[int] = None) -> int:
+    return patrol_week_start_ts(ts) + (7 * 86400)
+
+
+def patrol_lock_window(ts: Optional[int] = None) -> dict[str, Any]:
+    current_ts = ts or now_ts()
+    local_now = patrol_local_ts(current_ts)
+    local_day_start = local_now - (local_now % 86400)
+    local_weekday = time.gmtime(local_now).tm_wday
+    sunday_review_start_local = local_day_start + (13 * 3600)
+    if local_weekday != 6:
+        days_until_sunday = (6 - local_weekday) % 7
+        sunday_review_start_local = local_day_start + (days_until_sunday * 86400) + (13 * 3600)
+    start_ts = sunday_review_start_local - PATROL_LOCK_OFFSET_SECONDS
+    end_ts = start_ts + (2 * 3600)
+    locked = start_ts <= current_ts < end_ts
+    return {
+        "locked": locked,
+        "start_ts": start_ts,
+        "end_ts": end_ts,
+        "next_lock_ts": start_ts if current_ts < start_ts else start_ts + (7 * 86400),
+        "label": "Sunday 1 PM to 3 PM UTC-5",
+    }
 
 
 def json_dump(value: Any) -> str:
@@ -703,14 +740,19 @@ def sync_live_group_state(conn: sqlite3.Connection, row: sqlite3.Row) -> sqlite3
     live_group_member = 1 if live_role_name != "Guest" else 0
     current_group_member = int(row["is_group_member"] or 0)
 
-    if live_group_member != current_group_member or (live_group_member and (live_role_name != row["role_name"] or live_rank != row["group_rank"])):
+    expected_permissions = json_dump(role_permissions(live_role_name))
+    if (
+        live_group_member != current_group_member
+        or row["base_permissions"] != expected_permissions
+        or (live_group_member and (live_role_name != row["role_name"] or live_rank != row["group_rank"]))
+    ):
         conn.execute(
             """
             UPDATE sessions
             SET role_name = ?, base_permissions = ?, is_group_member = ?, group_rank = ?, staff_group_checked_at = ?
             WHERE custom_id = ?
             """,
-            (live_role_name, json_dump(role_permissions(live_role_name)), live_group_member, live_rank, now_ts(), row["custom_id"]),
+            (live_role_name, expected_permissions, live_group_member, live_rank, now_ts(), row["custom_id"]),
         )
         row = conn.execute("SELECT * FROM sessions WHERE session_key = ?", (row["session_key"],)).fetchone()
     else:
@@ -1484,6 +1526,31 @@ def setup_db() -> None:
     """)
     ensure_column(conn, "custom_agent_codes", "target_group_rank", "target_group_rank INTEGER")
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS patrol_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            custom_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            roblox_username TEXT,
+            role_name TEXT NOT NULL,
+            group_rank INTEGER,
+            logged_hours REAL NOT NULL,
+            patrol_notes TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            denial_reason TEXT,
+            reviewed_by_custom_id TEXT,
+            reviewed_by_username TEXT,
+            reviewed_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    """)
+    ensure_column(conn, "patrol_logs", "group_rank", "group_rank INTEGER")
+    ensure_column(conn, "patrol_logs", "patrol_notes", "patrol_notes TEXT NOT NULL DEFAULT ''")
+    ensure_column(conn, "patrol_logs", "denial_reason", "denial_reason TEXT")
+    ensure_column(conn, "patrol_logs", "reviewed_by_custom_id", "reviewed_by_custom_id TEXT")
+    ensure_column(conn, "patrol_logs", "reviewed_by_username", "reviewed_by_username TEXT")
+    ensure_column(conn, "patrol_logs", "reviewed_at", "reviewed_at INTEGER")
+    cur.execute("""
         INSERT OR IGNORE INTO interview_settings (
             id, is_open, updated_by_custom_id, updated_by_username, updated_at
         ) VALUES (1, 0, 'SYSTEM', 'System', 0)
@@ -1621,6 +1688,253 @@ def me(session_key: str):
         "shutdown": shutdown_block_for(row),
         "join_limit": dict(join_limit) if join_limit else None,
         "interviews_open": interviews_open(),
+        "patrol_lock": patrol_lock_window(),
+    }
+
+
+def patrol_public(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "custom_id": row["custom_id"],
+        "username": row["username"],
+        "roblox_username": row["roblox_username"],
+        "role_name": row["role_name"],
+        "group_rank": row["group_rank"],
+        "logged_hours": row["logged_hours"],
+        "patrol_notes": row["patrol_notes"],
+        "status": row["status"],
+        "denial_reason": row["denial_reason"],
+        "reviewed_by_custom_id": row["reviewed_by_custom_id"],
+        "reviewed_by_username": row["reviewed_by_username"],
+        "reviewed_at": row["reviewed_at"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+@app.get("/api/patrols")
+def patrols(session_key: str):
+    actor = require_permission(session_key, "log_patrol")
+    can_review = "review_patrols" in merged_permissions(actor)
+    conn = db()
+    if can_review:
+        rows = conn.execute("SELECT * FROM patrol_logs ORDER BY created_at DESC LIMIT 250").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM patrol_logs WHERE custom_id = ? ORDER BY created_at DESC LIMIT 100",
+            (actor["custom_id"],),
+        ).fetchall()
+    pending_count = conn.execute("SELECT COUNT(*) AS c FROM patrol_logs WHERE status = 'PENDING'").fetchone()["c"]
+    conn.close()
+    return {
+        "items": [patrol_public(row) for row in rows],
+        "pending_count": pending_count,
+        "lock": patrol_lock_window(),
+        "can_review": can_review,
+        "can_delete": "delete_patrols" in merged_permissions(actor),
+    }
+
+
+@app.post("/api/patrols/log")
+def log_patrol(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "log_patrol")
+    lock = patrol_lock_window()
+    if lock["locked"]:
+        raise HTTPException(status_code=423, detail="Patrol logging is locked while HR+ reviews this week's patrols.")
+    try:
+        logged_hours = float(payload.get("logged_hours", 0))
+    except Exception:
+        logged_hours = 0
+    if logged_hours <= 0 or logged_hours > 24:
+        raise HTTPException(status_code=400, detail="Logged hours must be between 0 and 24.")
+    notes = str(payload.get("patrol_notes", "")).strip()[:1000]
+    patrol_images = payload.get("patrol_images") or []
+    if not isinstance(patrol_images, list):
+        patrol_images = []
+    patrol_attachments = report_image_attachments(patrol_images)
+    patrol_image_names = [f"{item['filename']} ({round(item['size'] / 1024)} KB)" for item in patrol_attachments]
+    created = now_ts()
+    conn = db()
+    cur = conn.execute(
+        """
+        INSERT INTO patrol_logs (
+            custom_id, username, roblox_username, role_name, group_rank,
+            logged_hours, patrol_notes, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+        """,
+        (
+            actor["custom_id"],
+            actor["username"],
+            actor["roblox_username"],
+            actor["role_name"],
+            actor["group_rank"],
+            logged_hours,
+            notes,
+            created,
+            created,
+        ),
+    )
+    patrol_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    webhook_fields = [
+        {"name": "Username", "value": actor["roblox_username"] or actor["username"]},
+        {"name": "Custom ID", "value": actor["custom_id"]},
+        {"name": "Current Rank", "value": actor["role_name"]},
+        {"name": "Rank ID", "value": str(actor["group_rank"] or "N/A")},
+        {"name": "Logged Hours", "value": str(logged_hours)},
+        {"name": "Status", "value": "PENDING"},
+        {"name": "Notes", "value": notes or "No notes provided."},
+        {"name": "Date", "value": human_time(created)},
+    ]
+    if patrol_image_names:
+        webhook_fields.append({
+            "name": "Imported Patrol Picture Proof",
+            "value": "\n".join(patrol_image_names)[:1024],
+        })
+    post_report_webhook_with_images(
+        PATROL_LOG_WEBHOOK,
+        "Patrol Logged - Pending Review",
+        webhook_fields,
+        patrol_attachments,
+        footer=actor["custom_id"],
+    )
+    log_staff_action(actor, f"Logged Patrol #{patrol_id}")
+    return {"success": True, "patrol_id": patrol_id}
+
+
+@app.post("/api/patrols/review")
+def review_patrol(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "review_patrols")
+    patrol_id = int(payload.get("patrol_id") or 0)
+    status = str(payload.get("status", "")).strip().upper()
+    denial_reason = str(payload.get("denial_reason", "")).strip()
+    if status not in {"APPROVED", "DENIED"}:
+        raise HTTPException(status_code=400, detail="Patrol status must be Approved or Denied.")
+    if status == "DENIED" and not denial_reason:
+        raise HTTPException(status_code=400, detail="A denial reason is required.")
+    conn = db()
+    row = conn.execute("SELECT * FROM patrol_logs WHERE id = ?", (patrol_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Patrol log not found.")
+    reviewed_at = now_ts()
+    conn.execute(
+        """
+        UPDATE patrol_logs
+        SET status = ?, denial_reason = ?, reviewed_by_custom_id = ?,
+            reviewed_by_username = ?, reviewed_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            status,
+            denial_reason if status == "DENIED" else None,
+            actor["custom_id"],
+            actor["roblox_username"] or actor["username"],
+            reviewed_at,
+            reviewed_at,
+            patrol_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    if status == "DENIED":
+        add_inbox_item(
+            row["custom_id"],
+            "Patrol Log Denied",
+            f"Your patrol log for {row['logged_hours']} hour(s) has been denied. Reason: {denial_reason}",
+            "patrol",
+        )
+    post_webhook(
+        PATROL_LOG_WEBHOOK,
+        f"Patrol {status.title()}",
+        [
+            {"name": "Patrol ID", "value": str(patrol_id)},
+            {"name": "User", "value": row["roblox_username"] or row["username"]},
+            {"name": "Logged Hours", "value": str(row["logged_hours"])},
+            {"name": "Reviewed By", "value": actor["roblox_username"] or actor["username"]},
+            {"name": "Status", "value": status},
+            {"name": "Denial Reason", "value": denial_reason or "N/A"},
+        ],
+        footer=actor["custom_id"],
+    )
+    log_staff_action(actor, f"Reviewed Patrol #{patrol_id} as {status}", row["custom_id"], row["roblox_username"] or row["username"])
+    return {"success": True}
+
+
+@app.post("/api/patrols/delete")
+def delete_patrol(payload: dict[str, Any]):
+    actor = require_permission(payload["session_key"], "delete_patrols")
+    patrol_id = int(payload.get("patrol_id") or 0)
+    conn = db()
+    row = conn.execute("SELECT * FROM patrol_logs WHERE id = ?", (patrol_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Patrol log not found.")
+    conn.execute("DELETE FROM patrol_logs WHERE id = ?", (patrol_id,))
+    conn.commit()
+    conn.close()
+    log_staff_action(actor, f"Deleted Patrol #{patrol_id}", row["custom_id"], row["roblox_username"] or row["username"])
+    return {"success": True}
+
+
+@app.get("/api/patrols/weekly")
+def patrol_weekly(session_key: str):
+    actor = require_permission(session_key, "review_patrols")
+    start_ts = patrol_week_start_ts()
+    end_ts = patrol_week_end_ts()
+    conn = db()
+    rows = conn.execute(
+        """
+        SELECT * FROM patrol_logs
+        WHERE created_at >= ? AND created_at < ?
+        ORDER BY created_at DESC
+        """,
+        (start_ts, end_ts),
+    ).fetchall()
+    staff_rows = conn.execute(
+        """
+        SELECT custom_id, username, roblox_username, role_name
+        FROM sessions
+        WHERE verified = 1 AND role_name != 'Guest'
+        ORDER BY last_seen_at DESC
+        """
+    ).fetchall()
+    conn.close()
+    approved = [row for row in rows if row["status"] == "APPROVED"]
+    totals: dict[str, dict[str, Any]] = {}
+    for row in staff_rows:
+        if row["custom_id"] not in totals:
+            totals[row["custom_id"]] = {
+                "custom_id": row["custom_id"],
+                "username": row["roblox_username"] or row["username"],
+                "role_name": row["role_name"],
+                "hours": 0.0,
+            }
+    for row in approved:
+        key = row["custom_id"]
+        if key not in totals:
+            totals[key] = {
+                "custom_id": row["custom_id"],
+                "username": row["roblox_username"] or row["username"],
+                "role_name": row["role_name"],
+                "hours": 0.0,
+            }
+        totals[key]["hours"] += float(row["logged_hours"])
+    ranked = sorted(totals.values(), key=lambda item: item["hours"], reverse=True)
+    quota_completed = [item for item in ranked if item["hours"] >= PATROL_WEEKLY_QUOTA_HOURS]
+    quota_missing = [item for item in ranked if item["hours"] < PATROL_WEEKLY_QUOTA_HOURS]
+    return {
+        "week_start_ts": start_ts,
+        "week_end_ts": end_ts,
+        "quota_hours": PATROL_WEEKLY_QUOTA_HOURS,
+        "total_hours": round(sum(float(row["logged_hours"]) for row in approved), 2),
+        "most_active": ranked[0] if ranked else None,
+        "least_active": ranked[-1] if ranked else None,
+        "quota_completed": quota_completed,
+        "quota_missing": quota_missing,
+        "items": [patrol_public(row) for row in rows],
+        "lock": patrol_lock_window(),
     }
 
 
