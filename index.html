@@ -1298,6 +1298,44 @@
       color:var(--text-secondary);padding:14px 16px;line-height:1.55;
     }
     .report-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .patrol-dashboard{display:grid;gap:18px}
+    .patrol-action-row{display:grid;grid-template-columns:minmax(240px,.7fr) 1fr;gap:16px;align-items:stretch}
+    .patrol-log-launch{
+      min-height:180px;padding:24px;border-radius:18px;border:1px solid rgba(143,243,255,.18);
+      background:radial-gradient(circle at 18% 18%,rgba(50,216,255,.14),transparent 34%),linear-gradient(135deg,rgba(50,216,255,.08),rgba(255,45,85,.04));
+      display:grid;align-content:center;gap:14px;box-shadow:0 24px 72px rgba(0,0,0,.34);
+    }
+    .patrol-log-launch strong{font-size:26px;text-transform:uppercase;color:#fff;letter-spacing:.05em}
+    .patrol-log-launch span{color:var(--text-secondary);line-height:1.6}
+    .patrol-lock-card{
+      padding:20px;border-radius:18px;border:1px solid rgba(255,209,102,.28);
+      background:linear-gradient(135deg,rgba(255,209,102,.1),rgba(50,216,255,.035));
+      color:var(--text-secondary);line-height:1.65;
+    }
+    .patrol-status{
+      display:inline-flex;align-items:center;justify-content:center;padding:7px 11px;border-radius:999px;
+      font-size:11px;font-weight:950;letter-spacing:.14em;text-transform:uppercase;border:1px solid rgba(255,255,255,.12);
+    }
+    .patrol-status.pending{color:#ffe9a6;background:rgba(255,209,102,.13);border-color:rgba(255,209,102,.42)}
+    .patrol-status.approved{color:#d8fff2;background:rgba(53,224,161,.13);border-color:rgba(53,224,161,.42)}
+    .patrol-status.denied{color:#ffe3ea;background:rgba(255,45,85,.13);border-color:rgba(255,45,85,.42)}
+    .patrol-table{display:grid;gap:12px}
+    .patrol-row{
+      display:grid;grid-template-columns:1.2fr .8fr .6fr .6fr auto;gap:12px;align-items:center;
+      padding:16px;border-radius:16px;border:1px solid rgba(143,243,255,.13);
+      background:linear-gradient(180deg,rgba(50,216,255,.045),rgba(1,6,13,.68));
+    }
+    .patrol-row-title{font-weight:950;color:#fff}
+    .patrol-row-sub{font-size:12px;color:var(--text-muted);margin-top:4px}
+    .patrol-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .patrol-week-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    .patrol-week-card{padding:18px;border-radius:16px;border:1px solid rgba(143,243,255,.13);background:rgba(1,6,13,.62)}
+    .patrol-week-label{font-size:11px;font-weight:950;letter-spacing:.2em;text-transform:uppercase;color:rgba(143,243,255,.7)}
+    .patrol-week-value{margin-top:8px;font-size:24px;font-weight:950;color:#fff}
+    .patrol-form{display:grid;gap:14px;min-width:min(720px,88vw)}
+    .patrol-form-head{padding:24px;border-radius:18px;border:1px solid rgba(143,243,255,.16);background:linear-gradient(135deg,rgba(50,216,255,.1),rgba(255,45,85,.045))}
+    .patrol-form-title{font-size:clamp(34px,6vw,56px);line-height:.92;margin:8px 0 6px;font-weight:950;text-transform:uppercase;color:#fff}
+    .patrol-review-box{display:grid;gap:12px;min-width:min(620px,88vw)}
     .staff-unlock-shell{
       position:relative;overflow:hidden;width:min(960px,92vw);min-height:620px;
       display:grid;grid-template-columns:310px minmax(0,1fr);gap:0;
@@ -1426,6 +1464,8 @@
       .profile-anchor{position:static;margin:16px}
       .report-shell{min-width:0}
       .report-priority-strip,.report-grid,.report-actions{grid-template-columns:1fr}
+      .patrol-action-row,.patrol-week-grid,.patrol-row{grid-template-columns:1fr}
+      .patrol-actions{justify-content:flex-start}
       .staff-unlock-shell{width:min(94vw,720px);min-height:auto;grid-template-columns:1fr}
       .staff-unlock-visual{border-right:none;border-bottom:1px solid rgba(143,243,255,.12);padding:24px}
       .staff-unlock-orb{width:170px;height:170px}
@@ -1790,6 +1830,7 @@ Audit channel transmitting</div>
 
     const panelCommands = {
       low: [
+        { category: "Patrols", name: "Patrol-Dashboard", desc: "Log patrols, review status, and track weekly activity from one staff dashboard.", btnId: "patrolDashboardBtn", btnText: "Open Dashboard", handler: "openPatrolDashboard" },
         { category: "Moderation", name: "Report blacklist", desc: "Blacklist abuse or spam of the divisional report system with a cleaner command flow.", btnId: "reportBlacklistBtn", btnText: "Open Command", handler: "openReportBlacklistModal" }
       ],
       middle: [
@@ -1991,7 +2032,7 @@ Audit channel transmitting</div>
           <p class="verification-desc">
             ${forceLogout
               ? "Your previous session was released, so command access is locked again until your Roblox identity is re-confirmed."
-              : "In order to access the website and its features, please verify your roblox account."}
+              : "Before we unlock the Internal Affairs systems, we need to confirm that the Roblox account belongs to you."}
           </p>
           <div class="verification-card">
             <h3 class="verification-card-title">What happens next</h3>
@@ -2328,11 +2369,11 @@ Audit channel transmitting</div>
 
     async function playStaffVersionUnlock() {
       const steps = [
-        "Checking Custom-Agent-Code...",
-        "Comparing Custom-Agent-Code with CAC database...",
-        "Communicating with Secure-System, awaiting Approval...",
-        "Creating Custom Agent Name...",
-        "Adding user into registration, loading Panels and Features, Building Link..."
+        "Checking User Custom-Agent-Code...",
+        "Comparing User Custom-Agent-Code with the database...",
+        "Linking Custom-Agent-Code with the user and connecting with Agent-Database...",
+        "Creating Custom Name for user to avoid harassment...",
+        "Request Approved by Agent-Database & Command-Network, logging inside staff version in a secure way..."
       ];
       el("genericModalBox").innerHTML = modalChrome(`
         <div class="staff-unlock-shell">
@@ -2814,11 +2855,11 @@ Audit channel transmitting</div>
             </div>
             <div class="report-field report-wide">
               <label for="reportReason">Reason</label>
-              <textarea class="report-control" id="reportReason" placeholder="Describe what happened, who was involved, and why IA should review it."></textarea>
+              <textarea class="report-control" id="reportReason" placeholder="Describe in detail what happened."></textarea>
             </div>
             <div class="report-field report-wide">
               <label for="reportEvidence">Evidence</label>
-              <textarea class="report-control" id="reportEvidence" placeholder="Paste links, screenshots, witness notes, clips, or other proof."></textarea>
+              <textarea class="report-control" id="reportEvidence" placeholder="You can paste video link. You can also import pictures via the button below."></textarea>
             </div>
             <div class="report-field report-wide">
               <label>Picture Evidence</label>
@@ -2833,7 +2874,7 @@ Audit channel transmitting</div>
             </div>
           </div>
           <div class="report-panel-note">
-            Reports are logged for review. Submitting false or spam reports may restrict access to the report system.
+            Every reports are classified to the Internal Affairs Division & The Joint Chiefs only. Your identity is protected, if an IA member leaks your report please DM bold2_1 with evidence. Additionally, every reports are tracked and logged for security reasons so if you're caught abusing or spamming the report system. You will receive heavy punishments.
           </div>
           <div class="report-actions">
             <button class="btn btn-blue" id="submitReportBtn">Submit Report</button>
@@ -3511,6 +3552,281 @@ Audit channel transmitting</div>
       });
     }
 
+    function patrolStatusPill(status) {
+      const normalized = String(status || "PENDING").toLowerCase();
+      const label = normalized === "approved" ? "Approved" : normalized === "denied" ? "Denied" : "Pending";
+      return `<span class="patrol-status ${normalized}">${label}</span>`;
+    }
+
+    function patrolDate(ts) {
+      return ts ? new Date(ts * 1000).toLocaleString() : "N/A";
+    }
+
+    function patrolRow(item, controls = true) {
+      const canReview = hasPerm("review_patrols") && item.status === "PENDING";
+      const canDelete = hasPerm("delete_patrols");
+      return `
+        <div class="patrol-row">
+          <div>
+            <div class="patrol-row-title">${safeText(item.roblox_username || item.username || "Unknown")}</div>
+            <div class="patrol-row-sub">${safeText(item.role_name)} | ${safeText(item.custom_id)} | ${patrolDate(item.created_at)}</div>
+          </div>
+          <div>
+            <div class="patrol-row-title">${Number(item.logged_hours || 0).toFixed(2)}h</div>
+            <div class="patrol-row-sub">Logged hours</div>
+          </div>
+          <div>${patrolStatusPill(item.status)}</div>
+          <div class="patrol-row-sub">${item.denial_reason ? `Denied: ${safeText(item.denial_reason)}` : safeText(item.patrol_notes || "No notes")}</div>
+          <div class="patrol-actions">
+            ${controls && canReview ? `<button class="btn btn-green" data-patrol-approve="${item.id}">Approve</button><button class="btn btn-red" data-patrol-deny="${item.id}">Deny</button>` : ""}
+            ${controls && canDelete ? `<button class="btn btn-red" data-patrol-delete="${item.id}">Delete</button>` : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    async function openPatrolDashboard() {
+      const data = await api(`/api/patrols?session_key=${encodeURIComponent(sessionKey)}`);
+      const weekly = hasPerm("review_patrols")
+        ? await api(`/api/patrols/weekly?session_key=${encodeURIComponent(sessionKey)}`).catch(() => null)
+        : null;
+      const pending = (data.items || []).filter(item => item.status === "PENDING");
+      const lock = data.lock || {};
+      animateContentSwap(() => {
+        el("contentArea").innerHTML = `
+          <div class="panel-shell patrol-dashboard">
+            ${panelHero("Patrol Command", "Patrol-Dashboard", "Log completed patrols, review pending submissions, and track weekly activity from the staff version of the website.")}
+            <div class="patrol-action-row">
+              <div class="patrol-log-launch">
+                <strong>Log your patrol</strong>
+                <span>${lock.locked ? "Patrol logging is currently locked for Sunday review." : "Finished your patrol? Submit your hours for HR+ review."}</span>
+                <button class="btn ${lock.locked ? "btn-red" : "btn-green"}" id="logPatrolBtn">${lock.locked ? "Locked" : "Log your patrol"}</button>
+              </div>
+              <div class="patrol-lock-card">
+                <strong style="color:#fff;">Weekly Review Lock</strong><br>
+                Patrol logging automatically locks every Sunday from 1 PM to 3 PM UTC-5 so HR+ can check the week.
+                <br><br>Status: ${lock.locked ? `<span class="patrol-status denied">Locked until ${patrolDate(lock.end_ts)}</span>` : `<span class="patrol-status approved">Open</span>`}
+              </div>
+            </div>
+            ${weekly ? `
+              <div class="patrol-week-grid">
+                <div class="patrol-week-card"><div class="patrol-week-label">Approved Hours</div><div class="patrol-week-value">${Number(weekly.total_hours || 0).toFixed(2)}h</div></div>
+                <div class="patrol-week-card"><div class="patrol-week-label">Most Active</div><div class="patrol-week-value">${weekly.most_active ? `${safeText(weekly.most_active.username)} (${Number(weekly.most_active.hours).toFixed(2)}h)` : "N/A"}</div></div>
+                <div class="patrol-week-card"><div class="patrol-week-label">Least Active</div><div class="patrol-week-value">${weekly.least_active ? `${safeText(weekly.least_active.username)} (${Number(weekly.least_active.hours).toFixed(2)}h)` : "N/A"}</div></div>
+              </div>
+              ${terminalChrome("Weekly quota tracker", `
+                <div class="grid-2">
+                  <div class="list-card"><strong>Completed quota (${Number(weekly.quota_hours).toFixed(1)}h)</strong><br>${weekly.quota_completed.length ? weekly.quota_completed.map(x => `${safeText(x.username)} - ${Number(x.hours).toFixed(2)}h`).join("<br>") : "Nobody completed quota yet."}</div>
+                  <div class="list-card"><strong>Missing quota</strong><br>${weekly.quota_missing.length ? weekly.quota_missing.map(x => `${safeText(x.username)} - ${Number(x.hours).toFixed(2)}h`).join("<br>") : "Nobody is below quota among approved logs."}</div>
+                </div>
+              `)}
+              ${terminalChrome("Pending-Dashboard", `
+                <div class="patrol-table">
+                  ${pending.length ? pending.map(item => patrolRow(item)).join("") : `<div class="list-card">No pending patrols waiting for review.</div>`}
+                </div>
+              `)}
+            ` : ""}
+            ${terminalChrome("All logged patrols", `
+              <div class="patrol-table">
+                ${(data.items || []).length ? data.items.map(item => patrolRow(item, Boolean(data.can_review || data.can_delete))).join("") : `<div class="list-card">No patrol logs found yet.</div>`}
+              </div>
+            `)}
+          </div>
+        `;
+        const logBtn = el("logPatrolBtn");
+        if (logBtn) logBtn.onclick = () => lock.locked ? topSlider("Patrol logging is locked for Sunday review.", 4500) : openLogPatrolModal();
+        bindPatrolDashboardActions();
+      });
+    }
+
+    function bindPatrolDashboardActions() {
+      document.querySelectorAll("[data-patrol-approve]").forEach(btn => {
+        btn.onclick = () => reviewPatrol(Number(btn.dataset.patrolApprove), "APPROVED");
+      });
+      document.querySelectorAll("[data-patrol-deny]").forEach(btn => {
+        btn.onclick = () => openDenyPatrolModal(Number(btn.dataset.patrolDeny));
+      });
+      document.querySelectorAll("[data-patrol-delete]").forEach(btn => {
+        btn.onclick = async () => {
+          await api("/api/patrols/delete", {
+            method: "POST",
+            body: JSON.stringify({ session_key: sessionKey, patrol_id: Number(btn.dataset.patrolDelete) })
+          });
+          toast("Patrol deleted.", 2400);
+          openPatrolDashboard();
+        };
+      });
+    }
+
+    function openLogPatrolModal() {
+      let patrolImages = [];
+      const patrolImageLimit = 5;
+      const maxPatrolImageBytes = 4 * 1024 * 1024;
+
+      el("genericModalBox").innerHTML = modalChrome(`
+        <div class="patrol-form">
+          <div class="patrol-form-head">
+            <div class="report-kicker">Patrol Submission</div>
+            <div class="patrol-form-title">Log Your Patrol</div>
+            <p class="report-sub">Submit your completed patrol for HR+ review. New logs are automatically marked Pending.</p>
+          </div>
+          <div class="report-grid">
+            <div class="report-field"><label>Username</label><input class="input report-control" value="${safeText(meState.roblox_username || meState.username)}" disabled></div>
+            <div class="report-field"><label>Current Rank</label><input class="input report-control" value="${safeText(meState.role_name)}" disabled></div>
+            <div class="report-field"><label>Logged Hours</label><input class="input report-control" id="patrolHoursInput" type="number" min="0.1" max="24" step="0.1" placeholder="Example: 2.5"></div>
+            <div class="report-field report-wide"><label>Patrol Notes</label><textarea class="report-control" id="patrolNotesInput" placeholder="Optional notes, location, shift details, or proof links."></textarea></div>
+            <div class="report-field report-wide">
+              <label>Picture Proof</label>
+              <div class="report-upload-zone">
+                <div class="report-upload-head">
+                  <div class="report-upload-copy">Import up to 5 patrol pictures. They will preview here and display inside the patrol webhook.</div>
+                  <button class="btn btn-blue" type="button" id="patrolImportPicturesBtn">Import Pictures</button>
+                </div>
+                <input class="report-file-input" id="patrolPictureInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple>
+                <div class="report-preview-grid" id="patrolPicturePreview"></div>
+              </div>
+            </div>
+          </div>
+          <div class="report-actions">
+            <button class="btn btn-green" id="confirmLogPatrolBtn">Log</button>
+            <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+
+      const formatPatrolFileSize = (bytes) => {
+        if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      };
+      const renderPatrolPicturePreview = () => {
+        const preview = el("patrolPicturePreview");
+        if (!preview) return;
+        preview.innerHTML = patrolImages.map((img, index) => `
+          <div class="report-preview-card">
+            <button class="report-preview-remove" type="button" data-patrol-image-remove="${index}">X</button>
+            <img src="${img.data_url}" alt="${safeText(img.name)} preview">
+            <div class="report-preview-meta">
+              <div class="report-preview-name">${safeText(img.name)}</div>
+              <div class="report-preview-size">${safeText(img.type)} | ${formatPatrolFileSize(img.size)}</div>
+            </div>
+          </div>
+        `).join("");
+        preview.querySelectorAll("[data-patrol-image-remove]").forEach(btn => {
+          btn.onclick = () => {
+            patrolImages.splice(Number(btn.dataset.patrolImageRemove), 1);
+            renderPatrolPicturePreview();
+          };
+        });
+      };
+      const readPatrolImageFile = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data_url: reader.result
+        });
+        reader.onerror = () => reject(new Error(`Unable to import ${file.name}.`));
+        reader.readAsDataURL(file);
+      });
+
+      el("patrolImportPicturesBtn").onclick = () => el("patrolPictureInput").click();
+      el("patrolPictureInput").onchange = async (event) => {
+        const files = Array.from(event.target.files || []);
+        event.target.value = "";
+        if (!files.length) return;
+        const openSlots = patrolImageLimit - patrolImages.length;
+        if (openSlots <= 0) {
+          topSlider(`You can only import ${patrolImageLimit} pictures for one patrol.`, 4200);
+          return;
+        }
+        const accepted = [];
+        for (const file of files.slice(0, openSlots)) {
+          if (!file.type.startsWith("image/")) {
+            topSlider(`${file.name} is not a valid image.`, 4200);
+            continue;
+          }
+          if (file.size > maxPatrolImageBytes) {
+            topSlider(`${file.name} is too large. Max size is 4 MB.`, 4200);
+            continue;
+          }
+          accepted.push(file);
+        }
+        if (files.length > openSlots) {
+          topSlider(`Only ${openSlots} more picture${openSlots === 1 ? "" : "s"} can be added.`, 4200);
+        }
+        try {
+          const imported = await Promise.all(accepted.map(readPatrolImageFile));
+          patrolImages = patrolImages.concat(imported);
+          renderPatrolPicturePreview();
+        } catch (err) {
+          topSlider(err.message || "Unable to import pictures.", 4500);
+        }
+      };
+
+      el("confirmLogPatrolBtn").onclick = async () => {
+        const logged_hours = Number(el("patrolHoursInput").value);
+        if (!logged_hours || logged_hours <= 0) {
+          topSlider("Please enter your logged patrol hours.", 4200);
+          return;
+        }
+        await api("/api/patrols/log", {
+          method: "POST",
+          body: JSON.stringify({
+            session_key: sessionKey,
+            logged_hours,
+            patrol_notes: el("patrolNotesInput").value.trim(),
+            patrol_images: patrolImages
+          })
+        });
+        hideModal("genericModal");
+        toast("Patrol logged and sent to Pending-Dashboard.", 2800);
+        openPatrolDashboard();
+      };
+    }
+
+    async function reviewPatrol(patrolId, status, denialReason = "") {
+      await api("/api/patrols/review", {
+        method: "POST",
+        body: JSON.stringify({
+          session_key: sessionKey,
+          patrol_id: patrolId,
+          status,
+          denial_reason: denialReason
+        })
+      });
+      toast(`Patrol ${status.toLowerCase()}.`, 2400);
+      hideModal("genericModal");
+      openPatrolDashboard();
+    }
+
+    function openDenyPatrolModal(patrolId) {
+      el("genericModalBox").innerHTML = modalChrome(`
+        <div class="patrol-review-box">
+          <div class="patrol-form-head">
+            <div class="report-kicker">Pending-Dashboard Review</div>
+            <div class="patrol-form-title">Deny Patrol</div>
+            <p class="report-sub">A denial reason is required. The user will receive the reason in their inbox immediately.</p>
+          </div>
+          <textarea class="report-control" id="patrolDenyReason" placeholder="Reason why this patrol is being denied"></textarea>
+          <div class="report-actions">
+            <button class="btn btn-red" id="confirmDenyPatrolBtn">Submit Denial</button>
+            <button class="btn btn-blue" onclick="hideModal('genericModal')">Cancel</button>
+          </div>
+        </div>
+      `);
+      showModal("genericModal");
+      el("confirmDenyPatrolBtn").onclick = () => {
+        const reason = el("patrolDenyReason").value.trim();
+        if (!reason) {
+          topSlider("You must write a denial reason.", 4200);
+          return;
+        }
+        reviewPatrol(patrolId, "DENIED", reason);
+      };
+    }
+
     async function renderLowPanel() {
       const tickets = hasPerm("view_tickets")
         ? await api(`/api/tickets/all?session_key=${encodeURIComponent(sessionKey)}`).catch(() => ({ items: [] }))
@@ -3526,6 +3842,7 @@ Audit channel transmitting</div>
               ${systemCard("Discipline", "Active", "Report blacklist controls are available from this deck.")}
             </div>
             <div class="command-board">
+              ${commandCard("Patrols", "Patrol-Dashboard", "Log patrols, review status, and track weekly activity from one staff dashboard.", "lowPatrolDashboardBtn", "Open Dashboard")}
               ${commandCard("Moderation", "Report blacklist", "Blacklist abuse or spam of the divisional report system with a cleaner command flow.", "reportBlacklistBtn", "Open Command")}
             </div>
             ${terminalChrome("Contact database", `
@@ -3550,7 +3867,8 @@ Audit channel transmitting</div>
               </div>
             `)}
           </div>
-        `;
+      `;
+        el("lowPatrolDashboardBtn").onclick = openPatrolDashboard;
         el("reportBlacklistBtn").onclick = openReportBlacklistModal;
         document.querySelectorAll("[data-ticket-handle]").forEach(btn => btn.onclick = () => openTicketThread(Number(btn.dataset.ticketHandle)));
         document.querySelectorAll("[data-ticket-view]").forEach(btn => btn.onclick = () => openTicketThread(Number(btn.dataset.ticketView)));
