@@ -1444,6 +1444,27 @@
     @keyframes crimsonSweep{0%,100%{transform:translateX(-30%);opacity:.25}50%{transform:translateX(30%);opacity:.9}}
     @keyframes reportEnter{from{opacity:0;transform:translateY(18px);filter:blur(10px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
 
+    /* Performance pass: keep the command look, remove the GPU-heavy parts. */
+    .bg-aurora,.bg-stars,.bg-noise,.bg-scan,.bg-command-hud,.bg-command-map,.bg-command-feed,.mouse-glow{display:none!important}
+    .bg-command{opacity:.18}
+    .bg-command::before,.bg-command::after{animation:none!important}
+    .bg-grid{opacity:.38;animation:none!important}
+    .sidebar,.panel,.modal-box,.chat-shell,.terminal-window,.verification-shell,.ticket-console,.restricted-box,.terminated-box{
+      backdrop-filter:none!important;
+      box-shadow:0 18px 56px rgba(0,0,0,.46),inset 0 1px 0 rgba(255,255,255,.045)!important;
+    }
+    .modal{backdrop-filter:none!important;background:rgba(0,0,0,.68)!important}
+    .arc-reveal,.arc-reveal.is-visible,.content-stage-enter,.content-stage-exit{
+      filter:none!important;
+      animation-duration:.28s!important;
+    }
+    .nav-button,.panel-button,.btn,.list-card,.stat-card,.inbox-card,.command-card,.system-card,.dashboard-inbox,.profile-chip{
+      will-change:transform;
+    }
+    @media (prefers-reduced-motion: reduce){
+      *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+    }
+
     @media (max-width:980px){
       .layout{grid-template-columns:1fr;padding:18px}
       .sidebar{position:static}
@@ -1756,13 +1777,13 @@ Audit channel transmitting</div>
         setTimeout(() => {
           callback();
           if (area.firstElementChild) area.firstElementChild.classList.add("content-stage-enter");
-          applyArcsoftUi(area);
+          requestAnimationFrame(() => applyArcsoftUi(area));
         }, 260);
         return;
       }
       callback();
       if (area.firstElementChild) area.firstElementChild.classList.add("content-stage-enter");
-      applyArcsoftUi(area);
+      requestAnimationFrame(() => applyArcsoftUi(area));
     }
 
     function ensureArcRevealObserver() {
@@ -1778,7 +1799,7 @@ Audit channel transmitting</div>
     }
 
     function applyArcsoftUi(root = document) {
-      const targets = root.querySelectorAll(".hero-card, .content-card, .list-card, .stat-card, .inbox-card, .chat-shell, .interview-status-frame");
+      const targets = root.querySelectorAll(".hero-card, .content-card, .stat-card, .inbox-card, .chat-shell, .interview-status-frame");
       const observer = ensureArcRevealObserver();
       targets.forEach((node, index) => {
         if (node.dataset.arcRevealReady === "1") return;
@@ -2122,7 +2143,7 @@ Audit channel transmitting</div>
         } catch (e) {
           verificationLinkBusy = false;
           el("verificationEnterBtn").disabled = false;
-          el("verificationEnterBtn").textContent = "Enter";
+          el("verificationEnterBtn").textContent = "Generate Code";
           if (String(e.message || "").includes("already been verified")) {
             topSlider("This account has already been verified.", 5000);
             return;
@@ -3298,7 +3319,7 @@ Audit channel transmitting</div>
         try {
           await openTicketThread(ticketId, true);
         } catch (_) {}
-      }, 700);
+      }, 2200);
     }
 
     function buildTicketThreadMarkup(ticket, messages) {
@@ -4584,14 +4605,16 @@ Audit channel transmitting</div>
 
     async function openGiveStaffAccessModal() {
       const data = await api(`/api/logged-users?session_key=${encodeURIComponent(sessionKey)}`);
+      const eligibleUsers = (data.users || []).filter(u => u.verified);
       el("genericModalBox").innerHTML = modalChrome(`
         ${panelHero("Staff Network", "Give Staff Access", "Select a user, define a timed window or permanent access, and the website will generate a Custom-Agent-Code linked to that person.")}
         <div class="row">
           <select class="select" id="staffAccessTarget">
             <option value="">Select a user</option>
-            ${data.users.map(u => `<option value="${u.custom_id}">${u.roblox_username || u.username} | ${u.custom_id} | ${u.role_name}</option>`).join("")}
+            ${eligibleUsers.map(u => `<option value="${u.custom_id}">${u.roblox_username || u.username} | ${u.custom_id} | ${u.role_name}</option>`).join("")}
           </select>
           <input class="input" id="staffAccessDuration" placeholder="Time in minutes or PERMANENT">
+          <div class="list-card ${eligibleUsers.length ? "hidden" : ""}" style="color:var(--warning);">No verified staff users are currently available to receive staff access.</div>
           <div class="grid-2">
             <button class="btn btn-blue" id="confirmGiveStaffAccessBtn">Give Staff Access</button>
             <button class="btn btn-red" onclick="hideModal('genericModal')">Cancel</button>
@@ -4600,20 +4623,34 @@ Audit channel transmitting</div>
       `);
       showModal("genericModal");
       el("confirmGiveStaffAccessBtn").onclick = async () => {
-        const res = await api("/api/staff/access/grant", {
-          method: "POST",
-          body: JSON.stringify({
-            session_key: sessionKey,
-            target_custom_id: el("staffAccessTarget").value,
-            duration: el("staffAccessDuration").value.trim() || "PERMANENT"
-          })
-        });
-        el("genericModalBox").innerHTML = modalChrome(`
-          ${panelHero("Staff Network", "Staff access granted", "The selected user can now open the staff version, and the code is already stored in the command network database.")}
-          <div class="list-card" style="font-size:22px;text-align:center;font-weight:900;letter-spacing:.14em;">${res.code}</div>
-          <div class="list-card">Duration: ${res.time_label}</div>
-          <button class="btn btn-blue" onclick="hideModal('genericModal')">Close</button>
-        `);
+        const btn = el("confirmGiveStaffAccessBtn");
+        const targetId = el("staffAccessTarget").value;
+        if (!targetId) {
+          topSlider("Select a verified staff user first.", 4200);
+          return;
+        }
+        try {
+          btn.disabled = true;
+          btn.textContent = "Granting...";
+          const res = await api("/api/staff/access/grant", {
+            method: "POST",
+            body: JSON.stringify({
+              session_key: sessionKey,
+              target_custom_id: targetId,
+              duration: el("staffAccessDuration").value.trim() || "PERMANENT"
+            })
+          });
+          el("genericModalBox").innerHTML = modalChrome(`
+            ${panelHero("Staff Network", "Staff access granted", "The selected user can now open the staff version, and the code is already stored in the command network database.")}
+            <div class="list-card" style="font-size:22px;text-align:center;font-weight:900;letter-spacing:.14em;">${res.code}</div>
+            <div class="list-card">Duration: ${res.time_label}</div>
+            <button class="btn btn-blue" onclick="hideModal('genericModal')">Close</button>
+          `);
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = "Give Staff Access";
+          topSlider(e.message || "Unable to give staff access.", 5200);
+        }
       };
     }
 
@@ -4768,7 +4805,7 @@ Audit channel transmitting</div>
         try {
           await refreshMe();
         } catch (_) {}
-      }, 800);
+      }, 3000);
 
       applyArcsoftUi(document);
     });
