@@ -11,6 +11,7 @@ import string
 import time
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 from fastapi import FastAPI, HTTPException
@@ -28,7 +29,7 @@ APPEAL_LOG_WEBHOOK = "https://discord.com/api/webhooks/1494822440877035561/dYkRf
 PERMISSION_ABUSE_WEBHOOK = "https://discord.com/api/webhooks/1490475547925680248/efCrT5jds6-LsKFGQfWugvbS28YseOaG_HM1dhFTc3Uj9G5PGiV0b-WvAekPd4pihmLQ"
 INTERVIEW_LOG_WEBHOOK = "https://discord.com/api/webhooks/1502750825645080780/7dopNSSb1lTZLRYYtr3U8H7I8rqreK-T-QxIx_QpoBO_mAC_vr7raYVkLBvMLlJABZYM"
 PATROL_LOG_WEBHOOK = STAFF_ACTION_LOG_WEBHOOK
-PATROL_WEEKLY_QUOTA_HOURS = 3.0
+PATROL_WEEKLY_QUOTA_HOURS = 4.0
 PATROL_LOCK_OFFSET_SECONDS = -5 * 60 * 60
 
 ROBLOX_GROUP_ID = 36058174
@@ -986,12 +987,15 @@ def score_answer(text: str, keywords: list[str]) -> int:
 
 
 def roblox_lookup_username(username: str) -> tuple[int, str]:
-    res = requests.post(
-        "https://users.roblox.com/v1/usernames/users",
-        json={"usernames": [username], "excludeBannedUsers": False},
-        timeout=10,
-    )
-    res.raise_for_status()
+    try:
+        res = requests.post(
+            "https://users.roblox.com/v1/usernames/users",
+            json={"usernames": [username], "excludeBannedUsers": False},
+            timeout=10,
+        )
+        res.raise_for_status()
+    except requests.RequestException:
+        raise HTTPException(status_code=400, detail="Roblox lookup failed. Please retry in a moment.")
     data = res.json().get("data", [])
     if not data:
         raise HTTPException(status_code=400, detail="Roblox account not found.")
@@ -999,22 +1003,50 @@ def roblox_lookup_username(username: str) -> tuple[int, str]:
     return int(item["id"]), item["name"]
 
 
-def roblox_lookup_profile_link(link: str) -> tuple[int, str]:
-    link = link.strip()
-    if not link:
-        raise HTTPException(status_code=400, detail="Please paste your Roblox profile link.")
-
-    if re.fullmatch(r"\d+", link):
-        user_id = int(link)
+def roblox_user_by_id(user_id: int) -> tuple[int, str]:
+    try:
         res = requests.get(f"https://users.roblox.com/v1/users/{user_id}", timeout=10)
         if res.status_code == 404:
             raise HTTPException(status_code=400, detail="Roblox account not found.")
         res.raise_for_status()
-        data = res.json()
-        return user_id, data["name"]
+    except HTTPException:
+        raise
+    except requests.RequestException:
+        raise HTTPException(status_code=400, detail="Roblox lookup failed. Please retry in a moment.")
+    data = res.json()
+    return user_id, data["name"]
+
+
+def roblox_lookup_profile_link(link: str) -> tuple[int, str]:
+    link = unquote(link.strip())
+    if not link:
+        raise HTTPException(status_code=400, detail="Please paste your Roblox profile link.")
+
+    if re.fullmatch(r"\d+", link):
+        return roblox_user_by_id(int(link))
 
     if "roblox.com" not in link.lower() and "/" not in link:
         return roblox_lookup_username(link)
+
+    parsed = urlparse(link if re.match(r"^https?://", link, re.I) else f"https://{link}")
+    query = parse_qs(parsed.query)
+    username_values = query.get("username") or query.get("Username")
+    if username_values and username_values[0].strip():
+        return roblox_lookup_username(username_values[0].strip())
+
+    at_username_match = re.search(r"(?:^|/)@([A-Za-z0-9_]{3,20})(?:[/?#]|$)", parsed.path, re.I)
+    if at_username_match:
+        return roblox_lookup_username(at_username_match.group(1))
+
+    if "/share" in parsed.path.lower():
+        raise HTTPException(
+            status_code=400,
+            detail="Please paste the direct Roblox profile URL, username, or user ID. Roblox share links cannot generate verification codes.",
+        )
+
+    any_user_id_match = re.search(r"(?:userId|userid|id)=?(\d{3,})|/(\d{3,})(?:[/?#]|$)", link, re.I)
+    if any_user_id_match:
+        return roblox_user_by_id(int(any_user_id_match.group(1) or any_user_id_match.group(2)))
 
     username_match = re.search(r"/users/profile\?username=([^/?&#]+)", link, re.I)
     if username_match:
@@ -1024,22 +1056,10 @@ def roblox_lookup_profile_link(link: str) -> tuple[int, str]:
         return roblox_lookup_username(alt_username_match.group(1))
     direct_match = re.search(r"/users/(\d+)/profile", link, re.I)
     if direct_match:
-        user_id = int(direct_match.group(1))
-        res = requests.get(f"https://users.roblox.com/v1/users/{user_id}", timeout=10)
-        if res.status_code == 404:
-            raise HTTPException(status_code=400, detail="Roblox account not found.")
-        res.raise_for_status()
-        data = res.json()
-        return user_id, data["name"]
+        return roblox_user_by_id(int(direct_match.group(1)))
     users_segment_match = re.search(r"/users/(\d+)", link, re.I)
     if users_segment_match:
-        user_id = int(users_segment_match.group(1))
-        res = requests.get(f"https://users.roblox.com/v1/users/{user_id}", timeout=10)
-        if res.status_code == 404:
-            raise HTTPException(status_code=400, detail="Roblox account not found.")
-        res.raise_for_status()
-        data = res.json()
-        return user_id, data["name"]
+        return roblox_user_by_id(int(users_segment_match.group(1)))
     raise HTTPException(status_code=400, detail="Invalid Roblox profile link. Use a Roblox profile URL, username, or user ID.")
 
 
@@ -1992,8 +2012,10 @@ def verification_start(payload: dict[str, Any]):
         (user_id, row["custom_id"]),
     ).fetchone()
     if existing:
-        conn.close()
-        raise HTTPException(status_code=400, detail="This account has already been verified.")
+        if now_ts() - int(existing["last_seen_at"] or 0) <= 12:
+            conn.close()
+            raise HTTPException(status_code=400, detail="This account is already verified.")
+        reset_sessions_to_guest(conn, existing["custom_id"], user_id, forced_logout=0)
 
     code = make_verification_code()
     while conn.execute("SELECT 1 FROM sessions WHERE verification_code = ?", (code,)).fetchone():
@@ -2741,6 +2763,8 @@ def staff_access_grant(payload: dict[str, Any]):
     if not target:
         conn.close()
         raise HTTPException(status_code=404, detail="User not found.")
+    if target["verified"] and target["roblox_user_id"]:
+        target = sync_live_group_state(conn, target)
     if not target["verified"] or not target["is_group_member"]:
         conn.close()
         raise HTTPException(status_code=403, detail="Staff access can only be given to verified Roblox group members.")
