@@ -1578,6 +1578,7 @@ Audit channel transmitting</div>
       <div class="menu">
         <button class="nav-button btn-blue" id="dashboardBtn">Dashboard</button>
         <button class="nav-button btn-red" id="reportBtn">Report a divisional member</button>
+        <button class="nav-button btn-red" id="blacklistBtn">Blacklist</button>
         <button class="nav-button btn-blue" id="appealBtn">Appeal a punishment</button>
         <button class="nav-button btn-blue" id="contactBtn">Contact</button>
         <button class="nav-button btn-blue" id="applyJoinBtn">Apply To Join the Internal Affairs Division</button>
@@ -4791,6 +4792,7 @@ Audit channel transmitting</div>
 
     el("dashboardBtn").onclick = renderDashboard;
     el("reportBtn").onclick = openReportModal;
+    el("blacklistBtn").onclick = openReportBlacklistModal;
     el("appealBtn").onclick = startAppealBot;
     el("contactBtn").onclick = openContact;
     el("applyJoinBtn").onclick = startInterviewApplication;
