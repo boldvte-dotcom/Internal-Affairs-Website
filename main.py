@@ -7,27 +7,30 @@ supabase_url: str = "https://acpnenozoswrdzqqqtdl.supabase.co"
 supabase_key: str = "sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0"
 supabase: Client = create_client(supabase_url, supabase_key)
 
+# --- CONNEXION SUPABASE ---
+supabase_url: str = "https://supabase.co"
+supabase_key: str = "sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0"
+supabase: Client = create_client(supabase_url, supabase_key)
 
-# 2. The universal saving function for ALL features
-def save_everything(feature_name, data_dictionary):
-    try:
-        supabase.table("website_data").insert({
-            "feature_type": feature_name,
-            "data": data_dictionary
-        }).execute()
-        print(f"Successfully saved {feature_name} data!")
-    except Exception as e:
-        print(f"Error saving {feature_name}: {e}")
-
-@app.before_request
-def auto_save_all_forms():
-    # 1. Check if the user is submitting a web form
+# --- SAUVEGARDE AUTOMATIQUE DES FORMULAIRES ---
+@app.middleware("http")
+async def auto_save_all_forms(request: Request, call_next):
     if request.method == "POST":
-        # 2. Extract the form data as a standard dictionary
-        form_data = request.form.to_dict()
-        
-        # If there is actual data inside the form, save it
-        if form_data:
+        try:
+            form_data = await request.form()
+            form_dict = dict(form_data)
+            
+            if form_dict:
+                supabase.table("website_data").insert({
+                    "feature_type": f"form_{request.url.path.strip('/')}",
+                    "data": form_dict
+                }).execute()
+        except Exception as e:
+            print(f"Auto-save background error: {e}")
+            
+    response = await call_next(request)
+    return response
+
             try:
                 # 3. Save it under the URL path they submitted to (e.g., "/submit-ticket")
                 supabase.table("website_data").insert({
