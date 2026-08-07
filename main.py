@@ -1,17 +1,14 @@
 from __future__ import annotations
 import os
 from supabase import create_client, Client
-
 # Direct fallback credentials bypassed through Render's environment bug
 supabase_url: str = "https://acpnenozoswrdzqqqtdl.supabase.co"
 supabase_key: str = "sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0"
 supabase: Client = create_client(supabase_url, supabase_key)
-
 # --- CONNEXION SUPABASE ---
 supabase_url: str = "https://supabase.co"
 supabase_key: str = "sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0"
 supabase: Client = create_client(supabase_url, supabase_key)
-
 # --- SAUVEGARDE AUTOMATIQUE DES FORMULAIRES ---
 @app.middleware("http")
 async def auto_save_all_forms(request: Request, call_next):
@@ -39,8 +36,6 @@ async def auto_save_all_forms(request: Request, call_next):
                 }).execute()
             except Exception as e:
                 print(f"Auto-save background error: {e}")
-
-
 import base64
 import io
 import json
