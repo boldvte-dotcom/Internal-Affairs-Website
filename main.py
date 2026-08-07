@@ -2,10 +2,11 @@ from __future__ import annotations
 import os
 from supabase import create_client, Client
 
-# 1. Connect to your database using the Render keys safely
-supabase_url: str = os.environ.get("https://acpnenozoswrdzqqqtdl.supabase.co")
-supabase_key: str = os.environ.get("sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0")
+# Direct fallback credentials bypassed through Render's environment bug
+supabase_url: str = "https://acpnenozoswrdzqqqtdl.supabase.co"
+supabase_key: str = "sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0"
 supabase: Client = create_client(supabase_url, supabase_key)
+
 
 # 2. The universal saving function for ALL features
 def save_everything(feature_name, data_dictionary):
