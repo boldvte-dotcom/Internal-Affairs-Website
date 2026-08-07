@@ -1,3 +1,22 @@
+import os
+from supabase import create_client, Client
+
+# 1. Connect to your database using the Render keys safely
+supabase_url: str = os.environ.get("https://acpnenozoswrdzqqqtdl.supabase.co")
+supabase_key: str = os.environ.get("sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0")
+supabase: Client = create_client(supabase_url, supabase_key)
+
+# 2. The universal saving function for ALL features
+def save_everything(feature_name, data_dictionary):
+    try:
+        supabase.table("website_data").insert({
+            "feature_type": feature_name,
+            "data": data_dictionary
+        }).execute()
+        print(f"Successfully saved {feature_name} data!")
+    except Exception as e:
+        print(f"Error saving {feature_name}: {e}")
+
 from __future__ import annotations
 
 import base64
