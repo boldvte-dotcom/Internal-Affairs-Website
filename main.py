@@ -18,7 +18,6 @@ def save_everything(feature_name, data_dictionary):
         print(f"Successfully saved {feature_name} data!")
     except Exception as e:
         print(f"Error saving {feature_name}: {e}")
-from flask import request
 
 @app.before_request
 def auto_save_all_forms():
