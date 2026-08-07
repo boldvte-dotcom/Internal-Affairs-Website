@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 from supabase import create_client, Client
 
@@ -36,7 +37,6 @@ def auto_save_all_forms():
             except Exception as e:
                 print(f"Auto-save background error: {e}")
 
-from __future__ import annotations
 
 import base64
 import io
