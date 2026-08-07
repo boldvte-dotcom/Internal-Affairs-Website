@@ -16,6 +16,25 @@ def save_everything(feature_name, data_dictionary):
         print(f"Successfully saved {feature_name} data!")
     except Exception as e:
         print(f"Error saving {feature_name}: {e}")
+from flask import request
+
+@app.before_request
+def auto_save_all_forms():
+    # 1. Check if the user is submitting a web form
+    if request.method == "POST":
+        # 2. Extract the form data as a standard dictionary
+        form_data = request.form.to_dict()
+        
+        # If there is actual data inside the form, save it
+        if form_data:
+            try:
+                # 3. Save it under the URL path they submitted to (e.g., "/submit-ticket")
+                supabase.table("website_data").insert({
+                    "feature_type": f"form_{request.path.strip('/')}",
+                    "data": form_data
+                }).execute()
+            except Exception as e:
+                print(f"Auto-save background error: {e}")
 
 from __future__ import annotations
 
