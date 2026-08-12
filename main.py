@@ -1,41 +1,4 @@
-from __future__ import annotations
-import os
-from supabase import create_client, Client
-# Direct fallback credentials bypassed through Render's environment bug
-supabase_url: str = "https://acpnenozoswrdzqqqtdl.supabase.co"
-supabase_key: str = "sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0"
-supabase: Client = create_client(supabase_url, supabase_key)
-# --- CONNEXION SUPABASE ---
-supabase_url: str = "https://supabase.co"
-supabase_key: str = "sb_publishable_uQfoLKhTgPrs418azHchHA_hXupbE-0"
-supabase: Client = create_client(supabase_url, supabase_key)
-# --- SAUVEGARDE AUTOMATIQUE DES FORMULAIRES ---
-@app.middleware("http")
-async def auto_save_all_forms(request: Request, call_next):
-    if request.method == "POST":
-        try:
-            form_data = await request.form()
-            form_dict = dict(form_data)
-            
-            if form_dict:
-                supabase.table("website_data").insert({
-                    "feature_type": f"form_{request.url.path.strip('/')}",
-                    "data": form_dict
-                }).execute()
-        except Exception as e:
-            print(f"Auto-save background error: {e}")
-            
-    response = await call_next(request)
-    return response
 
-            try:
-                # 3. Save it under the URL path they submitted to (e.g., "/submit-ticket")
-                supabase.table("website_data").insert({
-                    "feature_type": f"form_{request.path.strip('/')}",
-                    "data": form_data
-                }).execute()
-            except Exception as e:
-                print(f"Auto-save background error: {e}")
 import base64
 import io
 import json
