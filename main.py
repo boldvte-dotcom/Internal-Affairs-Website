@@ -1,13 +1,18 @@
+from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import os
 import random
 import re
+import secrets
 import sqlite3
 import string
+import smtplib
 import time
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, unquote, urlparse
@@ -15,7 +20,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
@@ -30,6 +35,7 @@ INTERVIEW_LOG_WEBHOOK = "https://discord.com/api/webhooks/1502750825645080780/7d
 PATROL_LOG_WEBHOOK = STAFF_ACTION_LOG_WEBHOOK
 PATROL_WEEKLY_QUOTA_HOURS = 4.0
 PATROL_LOCK_OFFSET_SECONDS = -5 * 60 * 60
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 ROBLOX_GROUP_ID = 36058174
 ROBLOX_GROUP_URL = "https://www.roblox.com/communities/36058174/Internal-Affairs-SFPD#!/about"
@@ -77,6 +83,7 @@ ROLE_PERMISSIONS = {
         "send_inbox_message",
         "view_tickets",
         "handle_tickets",
+        "check_background_history",
     ],
     "Middle Rank": [
         "report_access",
@@ -89,9 +96,11 @@ ROLE_PERMISSIONS = {
         "send_inbox_message",
         "view_tickets",
         "handle_tickets",
+        "check_background_history",
         "view_middle_rank_panel",
         "view_logged_users",
         "force_logout",
+        "lock_accounts",
         "give_permissions",
         "review_appeals",
     ],
@@ -106,13 +115,16 @@ ROLE_PERMISSIONS = {
         "send_inbox_message",
         "view_tickets",
         "handle_tickets",
+        "check_background_history",
         "view_middle_rank_panel",
         "view_logged_users",
         "force_logout",
+        "lock_accounts",
         "give_permissions",
         "review_appeals",
         "view_high_rank_panel",
         "review_patrols",
+        "manage_patrol_lock",
         "delete_patrols",
         "remove_permissions",
         "terminate_user",
@@ -133,13 +145,16 @@ ROLE_PERMISSIONS = {
         "send_inbox_message",
         "view_tickets",
         "handle_tickets",
+        "check_background_history",
         "view_middle_rank_panel",
         "view_logged_users",
         "force_logout",
+        "lock_accounts",
         "give_permissions",
         "review_appeals",
         "view_high_rank_panel",
         "review_patrols",
+        "manage_patrol_lock",
         "delete_patrols",
         "remove_permissions",
         "terminate_user",
@@ -167,13 +182,16 @@ ROLE_PERMISSIONS = {
         "send_inbox_message",
         "view_tickets",
         "handle_tickets",
+        "check_background_history",
         "view_middle_rank_panel",
         "view_logged_users",
         "force_logout",
+        "lock_accounts",
         "give_permissions",
         "review_appeals",
         "view_high_rank_panel",
         "review_patrols",
+        "manage_patrol_lock",
         "delete_patrols",
         "remove_permissions",
         "terminate_user",
@@ -203,13 +221,16 @@ ROLE_PERMISSIONS = {
         "send_inbox_message",
         "view_tickets",
         "handle_tickets",
+        "check_background_history",
         "view_middle_rank_panel",
         "view_logged_users",
         "force_logout",
+        "lock_accounts",
         "give_permissions",
         "review_appeals",
         "view_high_rank_panel",
         "review_patrols",
+        "manage_patrol_lock",
         "delete_patrols",
         "remove_permissions",
         "terminate_user",
@@ -284,13 +305,31 @@ def patrol_lock_window(ts: Optional[int] = None) -> dict[str, Any]:
     start_ts = sunday_review_start_local - PATROL_LOCK_OFFSET_SECONDS
     end_ts = start_ts + (2 * 3600)
     locked = start_ts <= current_ts < end_ts
-    return {
+    lock_data = {
         "locked": locked,
         "start_ts": start_ts,
         "end_ts": end_ts,
         "next_lock_ts": start_ts if current_ts < start_ts else start_ts + (7 * 86400),
         "label": "Sunday 1 PM to 3 PM UTC-5",
     }
+    try:
+        conn = db()
+        manual = conn.execute(
+            "SELECT * FROM manual_patrol_locks WHERE active = 1 AND until_ts > ? ORDER BY until_ts DESC LIMIT 1",
+            (current_ts,),
+        ).fetchone()
+        conn.close()
+        if manual:
+            lock_data.update({
+                "locked": True,
+                "start_ts": manual["created_at"],
+                "end_ts": manual["until_ts"],
+                "next_lock_ts": manual["until_ts"],
+                "label": manual["reason"] or "Manual HR+ patrol lock",
+            })
+    except Exception:
+        pass
+    return lock_data
 
 
 def json_dump(value: Any) -> str:
@@ -320,6 +359,45 @@ def make_verification_code() -> str:
 
 def make_visitor_key() -> str:
     return "VIS-" + "".join(random.choices(string.ascii_letters + string.digits, k=24))
+
+
+def make_email_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def password_hash(password: str, salt: Optional[str] = None) -> str:
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120000).hex()
+    return f"{salt}:{digest}"
+
+
+def password_matches(password: str, stored_hash: str) -> bool:
+    try:
+        salt, expected = stored_hash.split(":", 1)
+    except ValueError:
+        return False
+    actual = password_hash(password, salt).split(":", 1)[1]
+    return secrets.compare_digest(actual, expected)
+
+
+def send_email(to_email: str, subject: str, body: str) -> None:
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_user = os.getenv("SMTP_USERNAME", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
+    smtp_from = os.getenv("SMTP_FROM", smtp_user or "no-reply@internal-affairs.local").strip()
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    if not smtp_host or not smtp_user or not smtp_password:
+        print(f"[EMAIL NOT CONFIGURED] To: {to_email} | Subject: {subject}\n{body}")
+        return
+    message = EmailMessage()
+    message["From"] = smtp_from
+    message["To"] = to_email
+    message["Subject"] = subject
+    message.set_content(body)
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.send_message(message)
 
 
 def make_staff_agent_code() -> str:
@@ -1314,11 +1392,48 @@ def setup_db() -> None:
     ensure_column(conn, "sessions", "is_group_member", "is_group_member INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "sessions", "group_rank", "group_rank INTEGER")
     ensure_column(conn, "sessions", "staff_group_checked_at", "staff_group_checked_at INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "sessions", "account_id", "account_id INTEGER")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS known_visitors (
             visitor_key TEXT PRIMARY KEY,
             first_seen_at INTEGER NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS website_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            verified_email INTEGER NOT NULL DEFAULT 0,
+            email_verification_token TEXT,
+            locked INTEGER NOT NULL DEFAULT 0,
+            lock_reason TEXT,
+            lock_until_ts INTEGER,
+            cannot_create_new INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS account_email_blacklist (
+            email TEXT PRIMARY KEY,
+            reason TEXT NOT NULL,
+            created_by_custom_id TEXT NOT NULL,
+            created_by_username TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS manual_patrol_locks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            active INTEGER NOT NULL DEFAULT 1,
+            reason TEXT NOT NULL DEFAULT '',
+            until_ts INTEGER NOT NULL,
+            created_by_custom_id TEXT NOT NULL,
+            created_by_username TEXT NOT NULL,
+            created_at INTEGER NOT NULL
         )
     """)
     cur.execute("""
@@ -1595,8 +1710,46 @@ def session_row(session_key: str) -> sqlite3.Row:
     return row
 
 
+def account_for_session(conn: sqlite3.Connection, row: sqlite3.Row) -> Optional[sqlite3.Row]:
+    if not row["account_id"]:
+        return None
+    return conn.execute("SELECT * FROM website_accounts WHERE id = ?", (row["account_id"],)).fetchone()
+
+
+def account_lock_message(account: sqlite3.Row) -> Optional[str]:
+    if not account or not account["locked"]:
+        return None
+    if account["lock_until_ts"] and account["lock_until_ts"] <= now_ts():
+        conn = db()
+        conn.execute(
+            "UPDATE website_accounts SET locked = 0, lock_reason = NULL, lock_until_ts = NULL, updated_at = ? WHERE id = ?",
+            (now_ts(), account["id"]),
+        )
+        conn.commit()
+        conn.close()
+        return None
+    if account["lock_until_ts"]:
+        return f"Your account has been temporarily locked for {minutes_to_label(max(1, (int(account['lock_until_ts']) - now_ts()) // 60))}."
+    return "Your account has been permanently locked."
+
+
+def require_signed_account(row: sqlite3.Row) -> sqlite3.Row:
+    conn = db()
+    account = account_for_session(conn, row)
+    conn.close()
+    if not account:
+        raise HTTPException(status_code=403, detail="Please create or log into your website account first.")
+    if not account["verified_email"]:
+        raise HTTPException(status_code=403, detail="Please verify your email before continuing.")
+    lock_message = account_lock_message(account)
+    if lock_message:
+        raise HTTPException(status_code=423, detail=lock_message)
+    return account
+
+
 def require_permission(session_key: str, permission: str) -> sqlite3.Row:
     row = session_row(session_key)
+    require_signed_account(row)
     if permission not in merged_permissions(row):
         raise HTTPException(status_code=403, detail="No permission.")
     return row
@@ -1645,10 +1798,115 @@ def bootstrap(payload: dict[str, Any] | None = None):
     return {"session_key": session_key, "custom_id": custom_id, "visitor_key": visitor_key}
 
 
+@app.post("/api/account/signup")
+def account_signup(payload: dict[str, Any]):
+    row = session_row(payload["session_key"])
+    username = str(payload.get("username", "")).strip()
+    email = str(payload.get("email", "")).strip().lower()
+    password = str(payload.get("password", ""))
+    if row["account_id"]:
+        raise HTTPException(status_code=400, detail="You are already signed into a website account.")
+    if not re.fullmatch(r"[A-Za-z0-9_]{3,24}", username):
+        raise HTTPException(status_code=400, detail="Username must be 3-24 letters, numbers, or underscores.")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+
+    conn = db()
+    if conn.execute("SELECT 1 FROM account_email_blacklist WHERE email = ?", (email,)).fetchone():
+        conn.close()
+        raise HTTPException(status_code=403, detail="This email is blacklisted from creating new accounts.")
+    if conn.execute("SELECT 1 FROM website_accounts WHERE username = ? OR email = ?", (username, email)).fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="That username or email is already used.")
+
+    token = make_email_token()
+    created = now_ts()
+    cur = conn.execute(
+        """
+        INSERT INTO website_accounts (
+            username, email, password_hash, verified_email, email_verification_token, created_at, updated_at
+        ) VALUES (?, ?, ?, 0, ?, ?, ?)
+        """,
+        (username, email, password_hash(password), token, created, created),
+    )
+    account_id = cur.lastrowid
+    conn.execute("UPDATE sessions SET account_id = ?, username = ? WHERE session_key = ?", (account_id, username, row["session_key"]))
+    conn.commit()
+    conn.close()
+
+    verify_link = f"{APP_BASE_URL}/api/account/verify-email?token={token}"
+    send_email(
+        email,
+        "Welcome to the Internal Affairs website",
+        f"Welcome to the Internal Affairs website, please press on this button to verify your email.\n\nVerify Email: {verify_link}",
+    )
+    return {"success": True, "message": "Account created. Check your email to verify it.", "dev_verify_link": verify_link}
+
+
+@app.post("/api/account/login")
+def account_login(payload: dict[str, Any]):
+    row = session_row(payload["session_key"])
+    login = str(payload.get("login", "")).strip()
+    password = str(payload.get("password", ""))
+    conn = db()
+    account = conn.execute(
+        "SELECT * FROM website_accounts WHERE username = ? OR email = ?",
+        (login, login.lower()),
+    ).fetchone()
+    if not account or not password_matches(password, account["password_hash"]):
+        conn.close()
+        raise HTTPException(status_code=401, detail="Invalid username/email or password.")
+    lock_message = account_lock_message(account)
+    if lock_message:
+        conn.close()
+        raise HTTPException(status_code=423, detail=lock_message)
+    conn.execute("UPDATE sessions SET account_id = ?, username = ? WHERE session_key = ?", (account["id"], account["username"], row["session_key"]))
+    conn.commit()
+    conn.close()
+    if not account["verified_email"]:
+        raise HTTPException(status_code=403, detail="Please verify your email before continuing.")
+    return {"success": True}
+
+
+@app.post("/api/account/logout")
+def account_logout(payload: dict[str, Any]):
+    row = session_row(payload["session_key"])
+    conn = db()
+    conn.execute(
+        """
+        UPDATE sessions
+        SET account_id = NULL, staff_mode = 0, staff_agent_code = NULL, staff_agent_alias = NULL, staff_access_expires_at = NULL
+        WHERE session_key = ?
+        """,
+        (row["session_key"],),
+    )
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+
+@app.get("/api/account/verify-email")
+def account_verify_email(token: str):
+    conn = db()
+    account = conn.execute("SELECT * FROM website_accounts WHERE email_verification_token = ?", (token,)).fetchone()
+    if account:
+        conn.execute(
+            "UPDATE website_accounts SET verified_email = 1, email_verification_token = NULL, updated_at = ? WHERE id = ?",
+            (now_ts(), account["id"]),
+        )
+        conn.commit()
+    conn.close()
+    return RedirectResponse(url="/?email_verified=1")
+
+
 @app.get("/api/me")
 def me(session_key: str):
     row = session_row(session_key)
     conn = db()
+    account = account_for_session(conn, row)
+    lock_message = account_lock_message(account) if account else None
     blacklist = conn.execute(
         "SELECT * FROM report_blacklists WHERE custom_id = ? OR username = ?",
         (row["custom_id"], row["roblox_username"] or row["username"]),
@@ -1674,6 +1932,12 @@ def me(session_key: str):
 
     return {
         "custom_id": row["custom_id"],
+        "account_required": not bool(account),
+        "account_username": account["username"] if account else None,
+        "account_email": account["email"] if account else None,
+        "account_email_verified": bool(account["verified_email"]) if account else False,
+        "account_locked": bool(lock_message),
+        "account_lock_message": lock_message,
         "username": row["username"],
         "roblox_username": row["roblox_username"],
         "roblox_user_id": row["roblox_user_id"],
